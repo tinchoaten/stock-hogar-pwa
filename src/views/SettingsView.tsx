@@ -21,6 +21,7 @@ export default function SettingsView() {
   const [pasted, setPasted] = useState('')
   const [iaTest, setIaTest] = useState<{ ok: boolean; msg: string } | null>(null)
   const [iaBusy, setIaBusy] = useState(false)
+  const [iaStep, setIaStep] = useState('')
 
   const probarIA = async () => {
     const k = (draft.current.key || settings.geminiKey).trim()
@@ -31,7 +32,11 @@ export default function SettingsView() {
     setIaBusy(true)
     setIaTest(null)
     try {
-      const j = await generate(k, { contents: [{ parts: [{ text: 'Respondé solo con la palabra OK' }] }] })
+      const j = await generate(
+        k,
+        { contents: [{ parts: [{ text: 'Respondé solo con la palabra OK' }] }] },
+        { timeoutMs: 20000, onTry: (m) => setIaStep(m) },
+      )
       const txt = textOf(j)
       setIaTest({ ok: true, msg: `Gemini (${j._model}) respondió: “${txt || '(sin texto)'}”. La clave funciona.` })
     } catch (e) {
@@ -188,7 +193,7 @@ export default function SettingsView() {
         disabled={iaBusy}
         className="mt-2 min-h-[44px] w-full rounded-xl bg-slate-700 font-semibold disabled:opacity-50"
       >
-        {iaBusy ? 'Probando…' : 'Probar conexión con Gemini'}
+        {iaBusy ? `Probando${iaStep ? ` (${iaStep})` : ''}…` : 'Probar conexión con Gemini'}
       </button>
       {iaTest && (
         <p className="mt-1 text-sm" style={{ color: iaTest.ok ? '#4ade80' : '#f87171' }}>

@@ -70,7 +70,7 @@ export default function ReceiptScannerView() {
       const json = await generate(settings.geminiKey, {
         contents: [{ parts: [{ text: PROMPT }, { inline_data: { mime_type: 'image/jpeg', data: b64 } }] }],
         generationConfig: { responseMimeType: 'application/json', temperature: 0 },
-      })
+      }, { timeoutMs: 60000, onTry: (m) => setMsg(`Leyendo el ticket con IA (${m})…`) })
       const text: string = textOf(json) || '{}'
       const parsed = JSON.parse(text)
       const list: { descripcion: string; cantidad: number; precio_unitario: number }[] = Array.isArray(
