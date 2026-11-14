@@ -28,8 +28,11 @@ export async function postPayload(url: string, payload: Payload): Promise<void> 
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json = await res.json().catch(() => null)
-  if (json && json.status && json.status !== 'ok')
-    throw new ServerRejectedError(json.message ?? 'Error del servidor')
+  // Sin JSON con `status` (página de error de Google, lock vencido, cuota…) no hay confirmación:
+  // se trata como error transitorio para que el cambio siga en la cola y se reintente.
+  if (!json || typeof json.status !== 'string')
+    throw new Error('Respuesta inválida del servidor (no es JSON)')
+  if (json.status !== 'ok') throw new ServerRejectedError(json.message ?? 'Error del servidor')
 }
 
 export interface OFFResult {

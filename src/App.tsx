@@ -26,7 +26,7 @@ const TABS: { id: Tab; label: string; icon: typeof Package }[] = [
 const Cargando = () => <p className="p-10 text-center text-slate-400">Cargando…</p>
 
 export default function App() {
-  const { settings, activeHome, setActiveHome, accent, syncing, sync, pending, error, db, toast, dismissToast } =
+  const { settings, activeHome, setActiveHome, accent, syncing, sync, pending, error, rejected, dismissRejected, db, toast, dismissToast } =
     useApp()
   const [tab, setTab] = useState<Tab>('scan')
   const [bannerOff, setBannerOff] = useState(false)
@@ -77,8 +77,13 @@ export default function App() {
         </div>
       </header>
 
-      {error.includes('rechazó') && (
-        <p className="shrink-0 bg-amber-950 px-3 py-2 text-sm font-semibold text-amber-200">⚠ {error}</p>
+      {rejected && (
+        <div className="flex shrink-0 items-start gap-2 bg-amber-950 px-3 py-2 text-sm font-semibold text-amber-200">
+          <p className="flex-1">⚠ {rejected}</p>
+          <button className="min-h-[44px] min-w-[44px] px-2 text-amber-300" onClick={dismissRejected} aria-label="Cerrar aviso">
+            ✕
+          </button>
+        </div>
       )}
 
       {porVencer.length > 0 && !bannerOff && tab !== 'stock' && (

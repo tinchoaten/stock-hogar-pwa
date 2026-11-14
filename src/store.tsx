@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { fetchAll, postPayload, ServerRejectedError } from './api'
 import { DEFAULT_SETTINGS, EMPTY_DB, HOME_COLORS, STORAGE_KEYS } from './config'
-import { takeInviteFromHash } from './invite'
+import { confirmInvite, takeInviteFromHash } from './invite'
 import type {
   CatalogItem,
   DB,
@@ -66,6 +66,8 @@ interface Ctx {
   syncing: boolean
   pending: number
   error: string
+  rejected: string
+  dismissRejected: () => void
   lastSync: string
   sync: (silent?: boolean) => Promise<void>
   stockOf: (home: string, ean: string) => InventoryItem[]
@@ -81,7 +83,7 @@ interface Ctx {
 const AppCtx = createContext<Ctx | null>(null)
 
 /** Invitación familiar (#invite=…): se lee una sola vez al cargar el módulo y se limpia el hash. */
-const pendingInvite = takeInviteFromHash()
+const pendingInvite = confirmInvite(takeInviteFromHash())
 
 /** Activo = no consumido. 'Baja' es el valor viejo de 'Consumido'. */
 export const isActiveItem = (i: InventoryItem) =>
@@ -105,6 +107,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<Toast | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [error, setError] = useState('')
+  // Rechazos del servidor: quedan visibles hasta que la persona los cierra (no los pisa el siguiente sync).
+  const [rejected, setRejected] = useState('')
   const [lastSync, setLastSync] = useState(() => load<string>(STORAGE_KEYS.lastSync, ''))
 
   const queueRef = useRef(queue)
@@ -125,7 +129,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     flushing.current = true
     try {
-      let rejected = ''
       while (queueRef.current.length > 0) {
         const next = queueRef.current[0]
         try {
@@ -133,12 +136,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         } catch (e) {
           // Rechazo del servidor: se descarta para no bloquear los cambios que siguen.
           if (!(e instanceof ServerRejectedError)) throw e
-          rejected = `El servidor rechazó un cambio (${next.action}): ${e.message}`
+          const msg = `El servidor rechazó un cambio (${next.action}): ${e.message}`
+          setRejected((prev) => (prev ? `${prev} · ${msg}` : msg))
         }
         queueRef.current = queueRef.current.slice(1)
         setQueue(queueRef.current)
       }
-      setError(rejected)
+      setError('')
     } catch (e) {
       setError(`Sin conexión con el servidor: ${(e as Error).message}`)
     } finally {
@@ -307,6 +311,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [commit],
   )
 
+  const dismissRejected = useCallback(() => setRejected(''), [])
+
   const dismissToast = useCallback(() => {
     clearTimeout(toastTimer.current)
     setToast(null)
@@ -350,6 +356,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       syncing,
       pending: queue.length,
       error,
+      rejected,
+      dismissRejected,
       lastSync,
       sync,
       stockOf,
@@ -375,6 +383,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       syncing,
       queue.length,
       error,
+      rejected,
+      dismissRejected,
       lastSync,
       sync,
       stockOf,
