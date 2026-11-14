@@ -41,6 +41,10 @@ React 18 + TypeScript + Vite 8 + Tailwind CSS 3 + `vite-plugin-pwa` + `html5-qrc
 - **Stock:** búsqueda por nombre/marca/categoría, filtro Sin TACC y edición de vencimiento, ubicación y precio al tocar un ítem. `precio_pagado` viaja en `UPDATE_ITEM_STATUS` y requiere que `Code.gs` lo lea; además actualiza `ultimo_precio` del catálogo.
 - **Lista de compras:** `comercio_mas_barato` = comercio de la compra de menor precio unitario en `inventario`; botón de WhatsApp agrupa por comercio.
 
+## Estadísticas y bundle
+- `StatsView` (pestaña "Gastos"): gasto del mes vs. anterior (Global u hogar), desglose por comercio, inflación personal (primera vs. última compra por EAN, con precio y fechas distintas) y aprovechamiento (baja después del vencimiento = desperdicio). Todo se calcula en el cliente desde `inventario`; `fecha_ingreso` es la fecha de compra.
+- `ScannerView`, `ReceiptScannerView`, `StatsView` y `QR` se cargan con `React.lazy`; `manualChunks` en `vite.config.ts` separa `react-vendor`, `scanner-lib` (html5-qrcode), `qr-lib` e `icons`. El chunk más grande (`scanner-lib`) queda bajo 500 kB, sin advertencia de Vite.
+
 ## Convenciones y supuestos
 - Estados de ítem (los que evalúa `Code.gs`): `Cerrado`, `Abierto`, `Consumido`. Un ítem está activo si no tiene `fecha_baja` y no está `Consumido`. Por compatibilidad, `En Stock` se muestra como `Cerrado` y `Baja` como `Consumido`.
 - Fechas como `YYYY-MM-DD` en hora local.

@@ -6,6 +6,21 @@ const base = '/stock-hogar-pwa/'
 
 export default defineConfig({
   base,
+  build: {
+    rollupOptions: {
+      output: {
+        // Separa las librerías pesadas para cachearlas aparte y acelerar la carga inicial.
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('html5-qrcode')) return 'scanner-lib'
+          if (id.includes('qrcode-generator')) return 'qr-lib'
+          if (id.includes('lucide-react')) return 'icons'
+          if (/node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react-vendor'
+          return undefined
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({

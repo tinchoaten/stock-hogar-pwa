@@ -1,23 +1,29 @@
-import { useState } from 'react'
-import { Package, Receipt, ScanLine, Settings as Cog, ShoppingCart, RefreshCw } from 'lucide-react'
+import { lazy, Suspense, useState } from 'react'
+import { BarChart3, Package, Receipt, ScanLine, Settings as Cog, ShoppingCart, RefreshCw } from 'lucide-react'
 import { isActiveItem, useApp } from './store'
 import { daysUntil } from './utils'
-import ScannerView from './views/ScannerView'
-import ReceiptScannerView from './views/ReceiptScannerView'
 import InventoryView from './views/InventoryView'
 import ShoppingListView from './views/ShoppingListView'
 import SettingsView from './views/SettingsView'
 import { HOME_COLORS } from './config'
 
-type Tab = 'scan' | 'ticket' | 'stock' | 'compras' | 'ajustes'
+// Vistas pesadas: se descargan recién cuando se abren.
+const ScannerView = lazy(() => import('./views/ScannerView'))
+const ReceiptScannerView = lazy(() => import('./views/ReceiptScannerView'))
+const StatsView = lazy(() => import('./views/StatsView'))
+
+type Tab = 'scan' | 'ticket' | 'stock' | 'compras' | 'stats' | 'ajustes'
 
 const TABS: { id: Tab; label: string; icon: typeof Package }[] = [
   { id: 'scan', label: 'Escáner', icon: ScanLine },
   { id: 'ticket', label: 'Ticket', icon: Receipt },
   { id: 'stock', label: 'Stock', icon: Package },
   { id: 'compras', label: 'Compras', icon: ShoppingCart },
+  { id: 'stats', label: 'Gastos', icon: BarChart3 },
   { id: 'ajustes', label: 'Ajustes', icon: Cog },
 ]
+
+const Cargando = () => <p className="p-10 text-center text-slate-400">Cargando…</p>
 
 export default function App() {
   const { settings, activeHome, setActiveHome, accent, syncing, sync, pending, error, db, toast, dismissToast } =
@@ -84,11 +90,14 @@ export default function App() {
       )}
 
       <main className="relative min-h-0 flex-1 overflow-y-auto">
-        {tab === 'scan' && <ScannerView />}
-        {tab === 'ticket' && <ReceiptScannerView />}
-        {tab === 'stock' && <InventoryView />}
-        {tab === 'compras' && <ShoppingListView />}
-        {tab === 'ajustes' && <SettingsView />}
+        <Suspense fallback={<Cargando />}>
+          {tab === 'scan' && <ScannerView />}
+          {tab === 'ticket' && <ReceiptScannerView />}
+          {tab === 'stock' && <InventoryView />}
+          {tab === 'compras' && <ShoppingListView />}
+          {tab === 'stats' && <StatsView />}
+          {tab === 'ajustes' && <SettingsView />}
+        </Suspense>
       </main>
 
       {toast && (
@@ -112,15 +121,15 @@ export default function App() {
         </div>
       )}
 
-      <nav className="grid shrink-0 grid-cols-5 border-t border-slate-800 bg-slate-900 pb-[env(safe-area-inset-bottom)]">
+      <nav className="grid shrink-0 grid-cols-6 border-t border-slate-800 bg-slate-900 pb-[env(safe-area-inset-bottom)]">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setTab(id)}
-            className="flex min-h-[60px] flex-col items-center justify-center gap-0.5 text-[11px] font-semibold"
+            className="flex min-h-[60px] flex-col items-center justify-center gap-0.5 text-[10px] font-semibold"
             style={{ color: tab === id ? accent : '#94a3b8' }}
           >
-            <Icon size={24} />
+            <Icon size={22} />
             {label}
           </button>
         ))}

@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react'
+import { lazy, Suspense, useRef, useState } from 'react'
 import { Copy, Plus, Share2, Trash2 } from 'lucide-react'
-import QR from '../components/QR'
 import { BigButton, Label } from '../components/ui'
 import { inviteLink, parseInviteInput } from '../invite'
 import { useApp } from '../store'
 import type { DB } from '../types'
+
+const QR = lazy(() => import('../components/QR'))
 
 export default function SettingsView() {
   const { settings, setSettings, db, replaceDB, accent, sync, syncing, pending, error, lastSync, showToast } =
@@ -180,7 +181,9 @@ export default function SettingsView() {
         </label>
         {invite && (
           <>
-            <QR text={invite} />
+            <Suspense fallback={<p className="text-center text-sm text-slate-400">Generando QR…</p>}>
+              <QR text={invite} />
+            </Suspense>
             <p className="rounded-lg bg-amber-950 p-2 text-xs text-amber-200">
               Este link contiene tu URL del Apps Script{withKey && settings.geminiKey ? ' y tu clave de Gemini' : ''}.
               Compartilo solo con gente de confianza.
