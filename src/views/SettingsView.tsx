@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Copy, Plus, Share2, Trash2 } from 'lucide-react'
 import { BigButton, Label } from '../components/ui'
+import { GEMINI_MODEL } from '../config'
 import { inviteLink, parseInviteInput } from '../invite'
 import { useApp } from '../store'
 import type { DB } from '../types'
@@ -18,6 +19,36 @@ export default function SettingsView() {
   const [invite, setInvite] = useState('')
   const [withKey, setWithKey] = useState(true)
   const [pasted, setPasted] = useState('')
+  const [iaTest, setIaTest] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [iaBusy, setIaBusy] = useState(false)
+
+  const probarIA = async () => {
+    const k = (draft.current.key || settings.geminiKey).trim()
+    if (!k) {
+      setIaTest({ ok: false, msg: 'No hay clave cargada.' })
+      return
+    }
+    setIaBusy(true)
+    setIaTest(null)
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${k}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: 'Respondé solo con la palabra OK' }] }] }),
+        },
+      )
+      const j = await res.json()
+      if (!res.ok) throw new Error(j?.error?.message ?? `HTTP ${res.status}`)
+      const txt = String(j.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim()
+      setIaTest({ ok: true, msg: `Gemini respondió: “${txt || '(sin texto)'}”. La clave funciona.` })
+    } catch (e) {
+      setIaTest({ ok: false, msg: `Falló: ${(e as Error).message}` })
+    } finally {
+      setIaBusy(false)
+    }
+  }
   const fileRef = useRef<HTMLInputElement>(null)
 
   // Autoguardado: alias, clave de Gemini y URL se guardan al salir del campo y al salir de la pantalla,
@@ -161,6 +192,19 @@ export default function SettingsView() {
           ? `✓ Clave guardada en este dispositivo (${settings.geminiKey.slice(0, 4)}…${settings.geminiKey.slice(-4)})`
           : '⚠ Todavía no hay clave guardada en este dispositivo'}
       </p>
+      <button
+        onClick={() => void probarIA()}
+        disabled={iaBusy}
+        className="mt-2 min-h-[44px] w-full rounded-xl bg-slate-700 font-semibold disabled:opacity-50"
+      >
+        {iaBusy ? 'Probando…' : 'Probar conexión con Gemini'}
+      </button>
+      {iaTest && (
+        <p className="mt-1 text-sm" style={{ color: iaTest.ok ? '#4ade80' : '#f87171' }}>
+          {iaTest.ok ? '✓ ' : '✗ '}
+          {iaTest.msg}
+        </p>
+      )}
 
       <Label>APPS_SCRIPT_URL</Label>
       <input value={url} onChange={(e) => setUrl(e.target.value)} onBlur={commit} placeholder="https://script.google.com/macros/s/…/exec" className={input} autoCapitalize="off" />
