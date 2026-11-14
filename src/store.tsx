@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { fetchAll, postPayload } from './api'
+import { fetchAll, postPayload, ServerRejectedError } from './api'
 import { DEFAULT_SETTINGS, EMPTY_DB, HOME_COLORS, STORAGE_KEYS } from './config'
 import { takeInviteFromHash } from './invite'
 import type {
@@ -125,13 +125,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     flushing.current = true
     try {
+      let rejected = ''
       while (queueRef.current.length > 0) {
         const next = queueRef.current[0]
-        await postPayload(settingsRef.current.scriptUrl, next)
+        try {
+          await postPayload(settingsRef.current.scriptUrl, next)
+        } catch (e) {
+          // Rechazo del servidor: se descarta para no bloquear los cambios que siguen.
+          if (!(e instanceof ServerRejectedError)) throw e
+          rejected = `El servidor rechazó un cambio (${next.action}): ${e.message}`
+        }
         queueRef.current = queueRef.current.slice(1)
         setQueue(queueRef.current)
       }
-      setError('')
+      setError(rejected)
     } catch (e) {
       setError(`Sin conexión con el servidor: ${(e as Error).message}`)
     } finally {
@@ -166,7 +173,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const now = new Date().toISOString()
             setLastSync(now)
             save(STORAGE_KEYS.lastSync, now)
-            setError('')
           }
         }
       } catch (e) {

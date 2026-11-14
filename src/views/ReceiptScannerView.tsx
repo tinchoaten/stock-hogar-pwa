@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Camera, Link2 } from 'lucide-react'
+import { Camera, Link2, X } from 'lucide-react'
 import BarcodeScanner from '../components/BarcodeScanner'
 import { BigButton, Chip, Label, Sheet } from '../components/ui'
 import { COMERCIOS, GEMINI_MODEL, UBICACIONES } from '../config'
@@ -11,7 +11,7 @@ import { addDays, money, norm, num, today, uid } from '../utils'
 interface Row {
   descripcion: string
   cantidad: number
-  precio_unitario: number // ya con descuento global prorrateado
+  precio: string // precio unitario del ticket (editable); el descuento global se aplica al cargar
   ean: string | null
   include: boolean
 }
@@ -45,6 +45,10 @@ export default function ReceiptScannerView() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [linking, setLinking] = useState<number | null>(null)
+
+  const factor = 1 - Math.min(100, Math.max(0, num(descuento))) / 100
+  const neto = (r: Row) => Math.round(num(r.precio) * factor * 100) / 100
+  const patchRow = (i: number, p: Partial<Row>) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, ...p } : x)))
 
   const matchAlias = (desc: string): string | null => {
     const n = norm(desc)
@@ -84,7 +88,6 @@ export default function ReceiptScannerView() {
       )
         ? parsed
         : (parsed.items ?? [])
-      const factor = 1 - Math.min(100, Math.max(0, num(descuento))) / 100
       const next: Row[] = list
         .filter((i) => i.descripcion)
         .map((i) => {
@@ -92,7 +95,7 @@ export default function ReceiptScannerView() {
           return {
             descripcion: String(i.descripcion),
             cantidad: Math.max(1, Math.round(num(i.cantidad, 1))),
-            precio_unitario: Math.round(num(i.precio_unitario) * factor * 100) / 100,
+            precio: String(num(i.precio_unitario)),
             ean,
             include: !!ean,
           }
@@ -137,11 +140,11 @@ export default function ReceiptScannerView() {
           estado: 'Cerrado',
           fecha_apertura: '',
           fecha_baja: '',
-          precio_pagado: r.precio_unitario,
+          precio_pagado: neto(r),
           comercio,
         })
       }
-      if (cat) upsertCatalog({ ...cat, ultimo_precio: r.precio_unitario })
+      if (cat && neto(r) > 0) upsertCatalog({ ...cat, ultimo_precio: neto(r) })
       if (!rule)
         upsertRule({ hogar_id: activeHome, ean: r.ean, stock_minimo: 1, ubicacion_habitual: ubic })
     }
@@ -150,7 +153,8 @@ export default function ReceiptScannerView() {
     setRows([])
   }
 
-  const total = rows.filter((r) => r.include).reduce((s, r) => s + r.cantidad * r.precio_unitario, 0)
+  const total = rows.filter((r) => r.include && r.ean).reduce((s, r) => s + r.cantidad * neto(r), 0)
+  const sinVincular = rows.filter((r) => !r.ean).length
 
   return (
     <div className="space-y-3 p-3">
@@ -193,41 +197,78 @@ export default function ReceiptScannerView() {
 
       {rows.length > 0 && (
         <div className="space-y-2">
-          {rows.map((r, i) => (
-            <div key={i} className="rounded-2xl bg-slate-800 p-3">
-              <div className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  checked={r.include}
-                  disabled={!r.ean}
-                  onChange={(e) =>
-                    setRows((rs) => rs.map((x, j) => (j === i ? { ...x, include: e.target.checked } : x)))
-                  }
-                  className="mt-1 h-6 w-6"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="break-words text-sm font-semibold">
-                    {r.ean ? db.catalogo.find((c) => String(c.ean) === r.ean)?.nombre || r.descripcion : r.descripcion}
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    {r.cantidad} × {money(r.precio_unitario)}
-                    {r.ean ? ` · EAN ${r.ean}` : ' · producto nuevo'}
-                  </p>
-                </div>
-                {!r.ean && (
+          {rows.map((r, i) => {
+            const nombre = r.ean ? db.catalogo.find((c) => String(c.ean) === r.ean)?.nombre || r.descripcion : r.descripcion
+            return (
+              <div key={i} className={`rounded-2xl bg-slate-800 p-3 ${r.ean ? '' : 'ring-2 ring-amber-500/60'}`}>
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={r.include}
+                    disabled={!r.ean}
+                    onChange={(e) => patchRow(i, { include: e.target.checked })}
+                    className="mt-1 h-6 w-6 shrink-0"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="break-words text-sm font-semibold">{nombre}</p>
+                    <p className="text-xs text-slate-400">{r.ean ? `EAN ${r.ean}` : 'Producto nuevo: vinculalo para cargarlo'}</p>
+                  </div>
                   <button
-                    onClick={() => setLinking(i)}
-                    className="flex min-h-[44px] items-center gap-1 rounded-xl px-3 text-sm font-bold text-white"
-                    style={{ background: accent }}
+                    onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-700"
+                    aria-label="Quitar renglón"
                   >
-                    <Link2 size={16} /> Vincular EAN
+                    <X size={18} />
                   </button>
+                </div>
+
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    onClick={() => patchRow(i, { cantidad: Math.max(1, r.cantidad - 1) })}
+                    className="h-11 w-11 rounded-xl bg-slate-700 text-xl font-bold active:scale-95"
+                    aria-label="Menos"
+                  >
+                    −
+                  </button>
+                  <span className="w-8 text-center font-bold">{r.cantidad}</span>
+                  <button
+                    onClick={() => patchRow(i, { cantidad: r.cantidad + 1 })}
+                    className="h-11 w-11 rounded-xl bg-slate-700 text-xl font-bold active:scale-95"
+                    aria-label="Más"
+                  >
+                    +
+                  </button>
+                  <span className="text-slate-400">×</span>
+                  <input
+                    inputMode="decimal"
+                    value={r.precio}
+                    onChange={(e) => patchRow(i, { precio: e.target.value })}
+                    className="min-w-0 flex-1 rounded-xl bg-slate-900 px-3 py-2.5 text-base"
+                    aria-label="Precio unitario"
+                  />
+                </div>
+                {factor < 1 && (
+                  <p className="mt-1 text-right text-xs text-slate-400">Con descuento: {money(neto(r))} c/u</p>
                 )}
+
+                <button
+                  onClick={() => setLinking(i)}
+                  className="mt-2 flex min-h-[44px] w-full items-center justify-center gap-1 rounded-xl text-sm font-bold text-white"
+                  style={{ background: r.ean ? '#475569' : accent }}
+                >
+                  <Link2 size={16} /> {r.ean ? 'Cambiar EAN' : 'Vincular EAN'}
+                </button>
               </div>
-            </div>
-          ))}
+            )
+          })}
+          {sinVincular > 0 && (
+            <p className="rounded-xl bg-amber-950 p-3 text-sm text-amber-200">
+              {sinVincular} {sinVincular === 1 ? 'renglón sin vincular no se va' : 'renglones sin vincular no se van'} a cargar.
+              Vinculalos o quitalos con la ✕.
+            </p>
+          )}
           <p className="text-right text-sm text-slate-300">Total a cargar: {money(total)}</p>
-          <BigButton color={accent} onClick={cargar} disabled={!rows.some((r) => r.include)}>
+          <BigButton color={accent} onClick={cargar} disabled={!rows.some((r) => r.include && r.ean)}>
             Cargar al inventario de {activeHome}
           </BigButton>
         </div>

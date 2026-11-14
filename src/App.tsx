@@ -77,6 +77,10 @@ export default function App() {
         </div>
       </header>
 
+      {error.includes('rechazó') && (
+        <p className="shrink-0 bg-amber-950 px-3 py-2 text-sm font-semibold text-amber-200">⚠ {error}</p>
+      )}
+
       {porVencer.length > 0 && !bannerOff && tab !== 'stock' && (
         <div className="flex shrink-0 items-center gap-2 bg-red-950 px-3 py-2 text-sm">
           <button className="min-h-[40px] flex-1 text-left font-semibold text-red-200" onClick={() => setTab('stock')}>

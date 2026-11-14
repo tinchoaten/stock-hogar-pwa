@@ -45,6 +45,10 @@ React 18 + TypeScript + Vite 8 + Tailwind CSS 3 + `vite-plugin-pwa` + `html5-qrc
 - `StatsView` (pestaña "Gastos"): gasto del mes vs. anterior (Global u hogar), desglose por comercio, inflación personal (primera vs. última compra por EAN, con precio y fechas distintas) y aprovechamiento (baja después del vencimiento = desperdicio). Todo se calcula en el cliente desde `inventario`; `fecha_ingreso` es la fecha de compra.
 - `ScannerView`, `ReceiptScannerView`, `StatsView` y `QR` se cargan con `React.lazy`; `manualChunks` en `vite.config.ts` separa `react-vendor`, `scanner-lib` (html5-qrcode), `qr-lib` e `icons`. El chunk más grande (`scanner-lib`) queda bajo 500 kB, sin advertencia de Vite.
 
+## Ticket editable y cola de envíos
+- Cada renglón del ticket se edita antes de cargar: cantidad (− / +), precio unitario, "Cambiar EAN" / "Vincular EAN" y quitar (✕). El % de descuento global se aplica al cargar (`neto()`), así que se puede cambiar después de leer el ticket. Los renglones sin EAN no se cargan y se avisa cuántos son.
+- Cola de POST (`store.tsx`): un error de **red** reintenta indefinidamente; un rechazo del **servidor** (`ServerRejectedError`, `status != "ok"`) descarta ese cambio, avisa con un banner ("rechazó") y sigue con los demás, para no bloquear la cola.
+
 ## Convenciones y supuestos
 - Estados de ítem (los que evalúa `Code.gs`): `Cerrado`, `Abierto`, `Consumido`. Un ítem está activo si no tiene `fecha_baja` y no está `Consumido`. Por compatibilidad, `En Stock` se muestra como `Cerrado` y `Baja` como `Consumido`.
 - Fechas como `YYYY-MM-DD` en hora local.

@@ -15,6 +15,9 @@ export async function fetchAll(url: string): Promise<DB> {
   }
 }
 
+/** El servidor respondió, pero rechazó el cambio: reintentar no sirve. */
+export class ServerRejectedError extends Error {}
+
 /** POST con text/plain para evitar el preflight CORS de Apps Script. */
 export async function postPayload(url: string, payload: Payload): Promise<void> {
   const res = await fetch(url, {
@@ -25,7 +28,8 @@ export async function postPayload(url: string, payload: Payload): Promise<void> 
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json = await res.json().catch(() => null)
-  if (json && json.status && json.status !== 'ok') throw new Error(json.message ?? 'Error del servidor')
+  if (json && json.status && json.status !== 'ok')
+    throw new ServerRejectedError(json.message ?? 'Error del servidor')
 }
 
 export interface OFFResult {
