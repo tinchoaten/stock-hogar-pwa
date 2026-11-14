@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Package, Receipt, ScanLine, Settings as Cog, ShoppingCart, RefreshCw } from 'lucide-react'
-import { useApp } from './store'
+import { isActiveItem, useApp } from './store'
+import { daysUntil } from './utils'
 import ScannerView from './views/ScannerView'
 import ReceiptScannerView from './views/ReceiptScannerView'
 import InventoryView from './views/InventoryView'
@@ -19,8 +20,17 @@ const TABS: { id: Tab; label: string; icon: typeof Package }[] = [
 ]
 
 export default function App() {
-  const { settings, activeHome, setActiveHome, accent, syncing, sync, pending, error } = useApp()
+  const { settings, activeHome, setActiveHome, accent, syncing, sync, pending, error, db, toast, dismissToast } =
+    useApp()
   const [tab, setTab] = useState<Tab>('scan')
+  const [bannerOff, setBannerOff] = useState(false)
+
+  const porVencer = db.inventario.filter((i) => {
+    if (i.hogar_id !== activeHome || !isActiveItem(i)) return false
+    const d = daysUntil(i.fecha_vencimiento)
+    return d !== null && d <= 3
+  })
+  const vencidos = porVencer.filter((i) => (daysUntil(i.fecha_vencimiento) ?? 0) < 0).length
 
   return (
     <div className="mx-auto flex h-full max-w-xl flex-col">
@@ -61,13 +71,46 @@ export default function App() {
         </div>
       </header>
 
-      <main className="min-h-0 flex-1 overflow-y-auto">
+      {porVencer.length > 0 && !bannerOff && tab !== 'stock' && (
+        <div className="flex shrink-0 items-center gap-2 bg-red-950 px-3 py-2 text-sm">
+          <button className="min-h-[40px] flex-1 text-left font-semibold text-red-200" onClick={() => setTab('stock')}>
+            ⚠ {porVencer.length} {porVencer.length === 1 ? 'producto vence' : 'productos vencen'} en 3 días o menos
+            {vencidos > 0 ? ` (${vencidos} ya vencido${vencidos > 1 ? 's' : ''})` : ''} · Ver
+          </button>
+          <button className="min-h-[40px] px-2 text-red-300" onClick={() => setBannerOff(true)} aria-label="Ocultar aviso">
+            ✕
+          </button>
+        </div>
+      )}
+
+      <main className="relative min-h-0 flex-1 overflow-y-auto">
         {tab === 'scan' && <ScannerView />}
         {tab === 'ticket' && <ReceiptScannerView />}
         {tab === 'stock' && <InventoryView />}
         {tab === 'compras' && <ShoppingListView />}
         {tab === 'ajustes' && <SettingsView />}
       </main>
+
+      {toast && (
+        <div
+          key={toast.id}
+          className="fixed inset-x-3 bottom-[calc(76px+env(safe-area-inset-bottom))] z-50 mx-auto flex max-w-xl items-center gap-3 rounded-2xl bg-slate-100 px-4 py-3 text-slate-900 shadow-xl"
+        >
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{toast.msg}</span>
+          {toast.undo && (
+            <button
+              className="min-h-[40px] rounded-lg px-3 text-sm font-extrabold"
+              style={{ color: accent }}
+              onClick={() => {
+                toast.undo?.()
+                dismissToast()
+              }}
+            >
+              DESHACER
+            </button>
+          )}
+        </div>
+      )}
 
       <nav className="grid shrink-0 grid-cols-5 border-t border-slate-800 bg-slate-900 pb-[env(safe-area-inset-bottom)]">
         {TABS.map(({ id, label, icon: Icon }) => (

@@ -44,7 +44,16 @@ export type ItemPatch = Partial<
   >
 >
 
+export interface Toast {
+  id: number
+  msg: string
+  undo?: () => void
+}
+
 interface Ctx {
+  toast: Toast | null
+  showToast: (msg: string, undo?: () => void) => void
+  dismissToast: () => void
   db: DB
   settings: Settings
   setSettings: (s: Settings) => void
@@ -83,6 +92,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [db, setDb] = useState<DB>(() => ({ ...EMPTY_DB, ...load<Partial<DB>>(STORAGE_KEYS.db, {}) }))
   const [queue, setQueue] = useState<Payload[]>(() => load<Payload[]>(STORAGE_KEYS.queue, []))
   const [syncing, setSyncing] = useState(false)
+  const [toast, setToast] = useState<Toast | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [error, setError] = useState('')
   const [lastSync, setLastSync] = useState(() => load<string>(STORAGE_KEYS.lastSync, ''))
 
@@ -258,6 +269,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [commit],
   )
 
+  const dismissToast = useCallback(() => {
+    clearTimeout(toastTimer.current)
+    setToast(null)
+  }, [])
+
+  const showToast = useCallback((msg: string, undo?: () => void) => {
+    clearTimeout(toastTimer.current)
+    setToast({ id: Date.now(), msg, undo })
+    toastTimer.current = setTimeout(() => setToast(null), 5000)
+  }, [])
+
   const replaceDB = useCallback((next: DB) => setDb({ ...EMPTY_DB, ...next }), [])
 
   const stockOf = useCallback(
@@ -273,6 +295,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<Ctx>(
     () => ({
+      toast,
+      showToast,
+      dismissToast,
       db,
       settings,
       setSettings,
@@ -295,6 +320,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleShopping,
     }),
     [
+      toast,
+      showToast,
+      dismissToast,
       db,
       settings,
       setSettings,

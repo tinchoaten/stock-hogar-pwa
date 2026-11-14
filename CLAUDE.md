@@ -27,6 +27,12 @@ React 18 + TypeScript + Vite 8 + Tailwind CSS 3 + `vite-plugin-pwa` + `html5-qrc
 - `src/voice.ts` — dictado con `webkitSpeechRecognition` (es-AR) y parser de cantidad / precio / vencimiento.
 - Header multi-hogar: `settings.homes` y `settings.activeHome`; el color de acento (`HOME_COLORS`) cambia según el hogar activo.
 
+## UX transversal
+- **Deshacer:** `showToast(msg, undo)` en el store; todas las acciones de `useItemActions` restauran los valores previos (5 s).
+- **Aviso de vencimientos:** banner en `App.tsx` con ítems del hogar activo que vencen en ≤ 3 días (incluye vencidos); lleva a Stock.
+- **Stock mínimo editable:** sección plegable en `InventoryView` (`UPSERT_HOME_RULE`).
+- **Ráfaga:** en Modo Ingreso, suma +1 con los datos habituales (regla, último precio, vida útil) sin formulario; si el producto no tiene nombre, abre el formulario normal. El deshacer de ráfaga marca la unidad como `Consumido`.
+
 ## Convenciones y supuestos
 - Estados de ítem (los que evalúa `Code.gs`): `Cerrado`, `Abierto`, `Consumido`. Un ítem está activo si no tiene `fecha_baja` y no está `Consumido`. Por compatibilidad, `En Stock` se muestra como `Cerrado` y `Baja` como `Consumido`.
 - Fechas como `YYYY-MM-DD` en hora local.

@@ -13,9 +13,43 @@ import { listen, parseVoice, speechSupported } from '../voice'
 type Mode = 'ingreso' | 'salida'
 
 export default function ScannerView() {
-  const { accent, activeHome, db, stockOf } = useApp()
+  const { accent, activeHome, db, stockOf, addInventory, upsertRule, updateStatus, showToast } = useApp()
   const resolve = useProductResolver()
   const [mode, setMode] = useState<Mode>('ingreso')
+  const [burst, setBurst] = useState(false)
+  const [burstComercio, setBurstComercio] = useState<Comercio>('Supermercado')
+
+  /** Ráfaga: suma +1 con los datos habituales del producto, sin formulario. */
+  const addOne = (item: CatalogItem) => {
+    const rule = db.reglasHogar.find((r) => r.hogar_id === activeHome && String(r.ean) === item.ean)
+    const prev = [...db.inventario]
+      .reverse()
+      .find((i) => i.hogar_id === activeHome && String(i.ean) === item.ean)
+    const ubicacion = rule?.ubicacion_habitual || prev?.ubicacion || 'Alacena'
+    const precio = num(item.ultimo_precio) || num(prev?.precio_pagado)
+    const id = uid()
+    addInventory([
+      {
+        id_item: id,
+        hogar_id: activeHome,
+        ean: item.ean,
+        nombre: item.nombre,
+        fecha_ingreso: today(),
+        fecha_vencimiento: addDays(today(), num(item.dias_vida_util_cerrado, 180) || 180),
+        ubicacion,
+        estado: 'Cerrado',
+        fecha_apertura: '',
+        fecha_baja: '',
+        precio_pagado: precio,
+        comercio: burstComercio,
+      },
+    ])
+    if (!rule) upsertRule({ hogar_id: activeHome, ean: item.ean, stock_minimo: 1, ubicacion_habitual: ubicacion })
+    const total = stockOf(activeHome, item.ean).length + 1
+    showToast(`+1 ${item.nombre} (ahora ${total})`, () =>
+      updateStatus(id, { estado: 'Consumido', fecha_baja: today() }),
+    )
+  }
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [product, setProduct] = useState<CatalogItem | null>(null)
@@ -29,6 +63,10 @@ export default function ScannerView() {
     setMsg('')
     if (mode === 'salida' && stockOf(activeHome, ean).length === 0) {
       setMsg(`${r.item.nombre || ean}: no hay stock en ${activeHome}.`)
+      return
+    }
+    if (mode === 'ingreso' && burst && r.found && r.item.nombre) {
+      addOne(r.item)
       return
     }
     setNeedsData(!r.found || !r.item.nombre)
@@ -56,6 +94,29 @@ export default function ScannerView() {
           </button>
         ))}
       </div>
+
+      {mode === 'ingreso' && (
+        <div className="space-y-2">
+          <button
+            onClick={() => setBurst(!burst)}
+            className="flex min-h-[48px] w-full items-center justify-between rounded-2xl bg-slate-800 px-4"
+          >
+            <span className="text-sm font-bold">Ráfaga: sumar +1 sin preguntar</span>
+            <span className="relative h-7 w-12 rounded-full transition" style={{ background: burst ? accent : '#475569' }}>
+              <span className="absolute top-1 h-5 w-5 rounded-full bg-white transition-all" style={{ left: burst ? 24 : 4 }} />
+            </span>
+          </button>
+          {burst && (
+            <div className="flex gap-2">
+              {COMERCIOS.map((c) => (
+                <Chip key={c} active={burstComercio === c} color={accent} onClick={() => setBurstComercio(c)}>
+                  {c}
+                </Chip>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <BarcodeScanner onScan={onScan} enabled={!product && !busy} />
       {msg && <p className="rounded-xl bg-slate-800 p-3 text-center text-sm">{msg}</p>}
