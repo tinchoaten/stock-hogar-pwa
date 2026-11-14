@@ -4,7 +4,7 @@ import { isActiveItem, useApp } from '../store'
 import { useItemActions } from '../useItemActions'
 import { UBICACIONES } from '../config'
 import type { InventoryItem } from '../types'
-import { daysUntil, estadoLabel, norm, num, truthy } from '../utils'
+import { daysUntil, estadoLabel, norm, num, truthy, ymd } from '../utils'
 
 const FILTROS = ['Todos', 'Heladera', 'Alacena', 'Freezer']
 
@@ -137,7 +137,7 @@ export default function InventoryView() {
               <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold">{i.nombre}</p>
                 <p className="text-xs text-slate-400">
-                  {i.ubicacion} · {estadoLabel(i.estado)} · {i.fecha_vencimiento || 'sin vencimiento'}
+                  {i.ubicacion} · {estadoLabel(i.estado)} · {ymd(i.fecha_vencimiento) || 'sin vencimiento'}
                 </p>
               </div>
               <span className="text-sm font-bold" style={{ color: s.color }}>
@@ -177,13 +177,13 @@ export default function InventoryView() {
 
 function EditItemSheet({ item, onClose }: { item: InventoryItem; onClose: () => void }) {
   const { accent, updateStatus, upsertCatalog, db } = useApp()
-  const [venc, setVenc] = useState(item.fecha_vencimiento || '')
+  const [venc, setVenc] = useState(ymd(item.fecha_vencimiento))
   const [ubic, setUbic] = useState(item.ubicacion)
   const [precio, setPrecio] = useState(String(num(item.precio_pagado) || ''))
 
   const guardar = () => {
     const patch: Parameters<typeof updateStatus>[1] = {}
-    if (venc !== item.fecha_vencimiento) patch.fecha_vencimiento = venc
+    if (venc !== ymd(item.fecha_vencimiento)) patch.fecha_vencimiento = venc
     if (ubic !== item.ubicacion) patch.ubicacion = ubic
     const p = num(precio)
     if (p !== num(item.precio_pagado)) patch.precio_pagado = p

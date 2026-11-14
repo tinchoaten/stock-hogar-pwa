@@ -1,8 +1,24 @@
 import type { CatalogItem, DB, Payload } from './types'
 import { shelfLifeFor, TIPO_LIMPIEZA } from './utils'
 
+/** Tope para hablar con el Apps Script: sin esto, una petición colgada bloquea la cola y el sync. */
+const BACKEND_TIMEOUT_MS = 30000
+
+async function fetchBackend(url: string, init: RequestInit): Promise<Response> {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), BACKEND_TIMEOUT_MS)
+  try {
+    return await fetch(url, { ...init, redirect: 'follow', signal: ctrl.signal })
+  } catch (e) {
+    if ((e as Error)?.name === 'AbortError') throw new Error('El servidor no respondió a tiempo')
+    throw e
+  } finally {
+    clearTimeout(t)
+  }
+}
+
 export async function fetchAll(url: string): Promise<DB> {
-  const res = await fetch(url, { redirect: 'follow' })
+  const res = await fetchBackend(url, {})
   const json = await res.json()
   if (json?.status !== 'ok' || !json.data) throw new Error(json?.message ?? 'Respuesta inválida')
   const d = json.data
@@ -20,11 +36,10 @@ export class ServerRejectedError extends Error {}
 
 /** POST con text/plain para evitar el preflight CORS de Apps Script. */
 export async function postPayload(url: string, payload: Payload): Promise<void> {
-  const res = await fetch(url, {
+  const res = await fetchBackend(url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(payload),
-    redirect: 'follow',
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json = await res.json().catch(() => null)

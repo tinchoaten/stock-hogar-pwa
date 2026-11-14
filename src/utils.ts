@@ -13,6 +13,12 @@ export function parseDate(s: string): Date | null {
   return isNaN(d.getTime()) ? null : d
 }
 
+/** Normaliza a 'YYYY-MM-DD' (Sheets devuelve las fechas como timestamp ISO). '' si no hay fecha. */
+export const ymd = (s: string): string => {
+  const d = parseDate(s)
+  return d ? toISO(d) : ''
+}
+
 export function addDays(iso: string, n: number): string {
   const d = parseDate(iso) ?? new Date()
   d.setDate(d.getDate() + n)

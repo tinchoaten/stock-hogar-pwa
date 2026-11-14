@@ -20,6 +20,7 @@ import {
   today,
   uid,
   vidaCerrada,
+  ymd,
 } from '../utils'
 import { listen, parseVoice, speechSupported } from '../voice'
 
@@ -422,7 +423,7 @@ function SalidaSheet({ product, onClose }: { product: CatalogItem; onClose: () =
                     <span className="font-bold">{estadoLabel(i.estado)}</span> · {i.ubicacion}
                   </span>
                   <span className="text-slate-400">
-                    {i.fecha_vencimiento || 'sin fecha'}
+                    {ymd(i.fecha_vencimiento) || 'sin fecha'}
                     {d !== null && ` (${d < 0 ? `venció hace ${-d} d` : `${d} d`})`}
                   </span>
                 </button>
