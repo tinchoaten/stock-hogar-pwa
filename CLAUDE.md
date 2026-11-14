@@ -33,6 +33,14 @@ React 18 + TypeScript + Vite 8 + Tailwind CSS 3 + `vite-plugin-pwa` + `html5-qrc
 - **Stock mínimo editable:** sección plegable en `InventoryView` (`UPSERT_HOME_RULE`).
 - **Ráfaga:** en Modo Ingreso, suma +1 con los datos habituales (regla, último precio, vida útil) sin formulario; si el producto no tiene nombre, abre el formulario normal. El deshacer de ráfaga marca la unidad como `Consumido`.
 
+## Modo familiar (multi-usuario)
+- **Invitación:** Ajustes → "Invitar Familiar" genera `…/#invite=<base64url del JSON {scriptUrl, geminiKey?, homes}>` + QR (`qrcode-generator`, SVG) + compartir por WhatsApp (`navigator.share` / `wa.me`). Al abrir un link así, `takeInviteFromHash()` (módulo `src/invite.ts`, ejecutado una vez al cargar `store.tsx`) guarda la config, limpia el hash y el sync inicial corre de inmediato. En una PWA instalada (storage separado de Safari) se puede pegar el link en Ajustes.
+- **El link contiene secretos** (URL del script y, si se tilda, la clave de Gemini): compartir solo con gente de confianza.
+- **Sync:** al abrir, al volver la conexión, en `focus` y `visibilitychange` (silencioso, con piso de 3 s) y cada 25 s mientras `ShoppingListView` está abierta. Un GET que llega después de un cambio local se descarta para no pisarlo (`mutations` en el store).
+- **Salida con lotes:** si hay varias unidades con distinto vencimiento/estado/ubicación se elige cuál; por defecto la ya abierta, si no la que vence primero.
+- **Stock:** búsqueda por nombre/marca/categoría, filtro Sin TACC y edición de vencimiento, ubicación y precio al tocar un ítem. `precio_pagado` viaja en `UPDATE_ITEM_STATUS` y requiere que `Code.gs` lo lea; además actualiza `ultimo_precio` del catálogo.
+- **Lista de compras:** `comercio_mas_barato` = comercio de la compra de menor precio unitario en `inventario`; botón de WhatsApp agrupa por comercio.
+
 ## Convenciones y supuestos
 - Estados de ítem (los que evalúa `Code.gs`): `Cerrado`, `Abierto`, `Consumido`. Un ítem está activo si no tiene `fecha_baja` y no está `Consumido`. Por compatibilidad, `En Stock` se muestra como `Cerrado` y `Baja` como `Consumido`.
 - Fechas como `YYYY-MM-DD` en hora local.

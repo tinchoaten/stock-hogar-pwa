@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { fetchAll, postPayload } from './api'
 import { DEFAULT_SETTINGS, EMPTY_DB, HOME_COLORS, STORAGE_KEYS } from './config'
+import { takeInviteFromHash } from './invite'
 import type {
   CatalogItem,
   DB,
@@ -41,7 +42,8 @@ export type ItemPatch = Partial<
   Pick<
     InventoryItem,
     'estado' | 'ubicacion' | 'fecha_vencimiento' | 'fecha_apertura' | 'fecha_baja'
-  >
+  > &
+    Partial<Pick<InventoryItem, 'precio_pagado'>>
 >
 
 export interface Toast {
@@ -65,7 +67,7 @@ interface Ctx {
   pending: number
   error: string
   lastSync: string
-  sync: () => Promise<void>
+  sync: (silent?: boolean) => Promise<void>
   stockOf: (home: string, ean: string) => InventoryItem[]
   upsertCatalog: (item: CatalogItem) => void
   upsertRule: (rule: HomeRule) => void
@@ -78,6 +80,9 @@ interface Ctx {
 
 const AppCtx = createContext<Ctx | null>(null)
 
+/** Invitación familiar (#invite=…): se lee una sola vez al cargar el módulo y se limpia el hash. */
+const pendingInvite = takeInviteFromHash()
+
 /** Activo = no consumido. 'Baja' es el valor viejo de 'Consumido'. */
 export const isActiveItem = (i: InventoryItem) =>
   !i.fecha_baja && i.estado !== 'Consumido' && i.estado !== 'Baja'
@@ -85,6 +90,11 @@ export const isActiveItem = (i: InventoryItem) =>
 export function AppProvider({ children }: { children: ReactNode }) {
   const [settings, setSettingsState] = useState<Settings>(() => {
     const s = { ...DEFAULT_SETTINGS, ...load<Partial<Settings>>(STORAGE_KEYS.settings, {}) }
+    if (pendingInvite) {
+      s.scriptUrl = pendingInvite.scriptUrl
+      if (pendingInvite.geminiKey) s.geminiKey = pendingInvite.geminiKey
+      if (pendingInvite.homes.length) s.homes = pendingInvite.homes
+    }
     if (!s.homes?.length) s.homes = DEFAULT_SETTINGS.homes
     if (!s.homes.includes(s.activeHome)) s.activeHome = s.homes[0]
     return s
@@ -129,45 +139,67 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const sync = useCallback(async () => {
-    if (!settingsRef.current.scriptUrl) {
-      setError('Falta configurar la APPS_SCRIPT_URL en Ajustes.')
-      return
-    }
-    setSyncing(true)
-    try {
-      await flush()
-      if (queueRef.current.length === 0) {
-        const data = await fetchAll(settingsRef.current.scriptUrl)
-        setDb(data)
-        const now = new Date().toISOString()
-        setLastSync(now)
-        save(STORAGE_KEYS.lastSync, now)
-        setError('')
-      }
-    } catch (e) {
-      setError(`No se pudo sincronizar: ${(e as Error).message}`)
-    } finally {
-      setSyncing(false)
-    }
-  }, [flush])
+  const mutations = useRef(0)
+  const inflight = useRef(false)
+  const lastSyncAt = useRef(0)
 
-  // Sincroniza al abrir y cuando vuelve la conexión / la app al frente.
+  /** silent=true: no muestra spinner ni errores (para foco / polling). */
+  const sync = useCallback(
+    async (silent = false) => {
+      if (!settingsRef.current.scriptUrl) {
+        if (!silent) setError('Falta configurar la APPS_SCRIPT_URL en Ajustes.')
+        return
+      }
+      if (inflight.current) return
+      if (silent && Date.now() - lastSyncAt.current < 3000) return
+      inflight.current = true
+      lastSyncAt.current = Date.now()
+      if (!silent) setSyncing(true)
+      try {
+        await flush()
+        if (queueRef.current.length === 0) {
+          const seen = mutations.current
+          const data = await fetchAll(settingsRef.current.scriptUrl)
+          // Si el usuario cambió algo mientras viajaba el GET, esta foto ya es vieja: no pisar.
+          if (mutations.current === seen && queueRef.current.length === 0) {
+            setDb(data)
+            const now = new Date().toISOString()
+            setLastSync(now)
+            save(STORAGE_KEYS.lastSync, now)
+            setError('')
+          }
+        }
+      } catch (e) {
+        if (!silent) setError(`No se pudo sincronizar: ${(e as Error).message}`)
+      } finally {
+        inflight.current = false
+        if (!silent) setSyncing(false)
+      }
+    },
+    [flush],
+  )
+
+  // Sincroniza al abrir, al volver la conexión y cada vez que la app vuelve al frente.
   useEffect(() => {
     void sync()
-    const onOnline = () => void sync()
-    const onVisible = () => document.visibilityState === 'visible' && void flush()
+    const onOnline = () => void sync(true)
+    const onFront = () => {
+      if (document.visibilityState === 'visible') void sync(true)
+    }
     window.addEventListener('online', onOnline)
-    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onFront)
+    document.addEventListener('visibilitychange', onFront)
     return () => {
       window.removeEventListener('online', onOnline)
-      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onFront)
+      document.removeEventListener('visibilitychange', onFront)
     }
-  }, [sync, flush])
+  }, [sync])
 
   /** Optimistic UI: aplica el cambio local ya, y encola el POST. */
   const commit = useCallback(
     (payload: Payload, apply: (db: DB) => DB) => {
+      mutations.current++
       setDb(apply)
       const q = [...queueRef.current, payload]
       queueRef.current = q
@@ -279,6 +311,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setToast({ id: Date.now(), msg, undo })
     toastTimer.current = setTimeout(() => setToast(null), 5000)
   }, [])
+
+  useEffect(() => {
+    if (pendingInvite) showToast('Conectado a la familia ✓ sincronizando…')
+  }, [showToast])
 
   const replaceDB = useCallback((next: DB) => setDb({ ...EMPTY_DB, ...next }), [])
 

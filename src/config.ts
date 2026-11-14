@@ -3,6 +3,7 @@ import type { Comercio, DB, Settings, Ubicacion } from './types'
 export const DEFAULT_HOMES = ['Casa Principal', 'Casa 2']
 
 export const DEFAULT_SETTINGS: Settings = {
+  alias: '',
   geminiKey: '',
   scriptUrl: '', // se configura en Ajustes y vive solo en localStorage
   homes: DEFAULT_HOMES,

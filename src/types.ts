@@ -56,6 +56,7 @@ export interface DB {
 }
 
 export interface Settings {
+  alias: string
   geminiKey: string
   scriptUrl: string
   homes: string[]

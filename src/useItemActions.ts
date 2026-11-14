@@ -14,7 +14,8 @@ export function useItemActions() {
   /** Aplica el parche y ofrece restaurar los valores anteriores. */
   const withUndo = (item: InventoryItem, patch: ItemPatch, msg: string) => {
     const prev: ItemPatch = {}
-    for (const k of Object.keys(patch) as (keyof ItemPatch)[]) prev[k] = item[k]
+    for (const k of Object.keys(patch) as (keyof ItemPatch)[])
+      (prev as Record<string, unknown>)[k] = item[k]
     updateStatus(item.id_item, patch)
     showToast(`${msg}: ${item.nombre}`, () => updateStatus(item.id_item, prev))
   }

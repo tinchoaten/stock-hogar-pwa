@@ -293,8 +293,11 @@ function SalidaSheet({ product, onClose }: { product: CatalogItem; onClose: () =
   const { activeHome, accent, stockOf, settings } = useApp()
   const acts = useItemActions()
   const [pickHome, setPickHome] = useState(false)
-  const items = stockOf(activeHome, product.ean)
-  const item = items[0] // FEFO: el que vence primero
+  const items = stockOf(activeHome, product.ean) // ya ordenado por vencimiento (FIFO)
+  const [picked, setPicked] = useState('')
+  // Por defecto: la que ya está abierta; si no hay, la que vence primero.
+  const item = items.find((i) => i.id_item === picked) ?? items.find((i) => i.estado === 'Abierto') ?? items[0]
+  const distintas = new Set(items.map((i) => `${i.fecha_vencimiento}|${i.estado}|${i.ubicacion}`)).size > 1
   const others = settings.homes.filter((h) => h !== activeHome)
 
   if (!item) {
@@ -312,10 +315,42 @@ function SalidaSheet({ product, onClose }: { product: CatalogItem; onClose: () =
 
   return (
     <Sheet title={item.nombre || product.nombre} onClose={onClose}>
-      <p className="text-sm text-slate-400">
-        {items.length} en stock · {item.ubicacion} · {estadoLabel(item.estado)}
-        {dias !== null && ` · vence en ${dias} d`}
-      </p>
+      {items.length > 1 && distintas ? (
+        <>
+          <p className="text-sm text-slate-300">
+            Tenés {items.length} unidades, ¿cuál estás modificando?
+          </p>
+          <div className="mt-2 space-y-2">
+            {items.map((i) => {
+              const d = daysUntil(i.fecha_vencimiento)
+              const sel = i.id_item === item.id_item
+              return (
+                <button
+                  key={i.id_item}
+                  onClick={() => setPicked(i.id_item)}
+                  className={`flex min-h-[52px] w-full items-center justify-between rounded-xl border-2 px-3 text-left text-sm ${
+                    sel ? 'bg-slate-800' : 'border-transparent bg-slate-800/60'
+                  }`}
+                  style={sel ? { borderColor: accent } : undefined}
+                >
+                  <span>
+                    <span className="font-bold">{estadoLabel(i.estado)}</span> · {i.ubicacion}
+                  </span>
+                  <span className="text-slate-400">
+                    {i.fecha_vencimiento || 'sin fecha'}
+                    {d !== null && ` (${d < 0 ? `venció hace ${-d} d` : `${d} d`})`}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </>
+      ) : (
+        <p className="text-sm text-slate-400">
+          {items.length} en stock · {item.ubicacion} · {estadoLabel(item.estado)}
+          {dias !== null && ` · vence en ${dias} d`}
+        </p>
+      )}
       <div className="mt-4 space-y-2">
         <BigButton color="#dc2626" onClick={() => run(() => acts.baja(item))}>
           Se Terminó (Basura)

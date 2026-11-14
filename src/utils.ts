@@ -36,6 +36,10 @@ export function daysUntil(iso: string): number | null {
 /** Compatibilidad: 'En Stock' (valor viejo) se muestra como 'Cerrado'. */
 export const estadoLabel = (e: string) => (e === 'En Stock' || !e ? 'Cerrado' : e === 'Baja' ? 'Consumido' : e)
 
+/** Los booleanos de la planilla pueden llegar como true, "TRUE", "SI", 1… */
+export const truthy = (v: unknown) =>
+  v === true || v === 1 || /^(true|si|sí|1|x|yes)$/i.test(String(v ?? '').trim())
+
 export const uid = () =>
   `it_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
 

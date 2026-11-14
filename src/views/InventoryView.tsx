@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { Chip } from '../components/ui'
+import { BigButton, Chip, Label, Sheet } from '../components/ui'
 import { isActiveItem, useApp } from '../store'
 import { useItemActions } from '../useItemActions'
-import { daysUntil, estadoLabel, num } from '../utils'
+import { UBICACIONES } from '../config'
+import type { InventoryItem } from '../types'
+import { daysUntil, estadoLabel, norm, num, truthy } from '../utils'
 
 const FILTROS = ['Todos', 'Heladera', 'Alacena', 'Freezer']
 
@@ -15,6 +17,10 @@ function semaforo(d: number | null): { color: string; label: string } {
 
 export default function InventoryView() {
   const { db, activeHome, accent, upsertRule } = useApp()
+  const [q, setQ] = useState('')
+  const [soloSinTacc, setSoloSinTacc] = useState(false)
+  const [editing, setEditing] = useState<InventoryItem | null>(null)
+  const catOf = (ean: string) => db.catalogo.find((c) => String(c.ean) === String(ean))
   const acts = useItemActions()
   const [filtro, setFiltro] = useState('Todos')
   const [showMin, setShowMin] = useState(false)
@@ -25,10 +31,34 @@ export default function InventoryView() {
   const items = db.inventario
     .filter((i) => i.hogar_id === activeHome && isActiveItem(i))
     .filter((i) => filtro === 'Todos' || i.ubicacion === filtro)
+    .filter((i) => !soloSinTacc || truthy(catOf(i.ean)?.sin_tacc))
+    .filter((i) => {
+      const t = norm(q)
+      if (!t) return true
+      const c = catOf(i.ean)
+      const hay = norm(`${i.nombre} ${c?.marca ?? ''} ${c?.categoria ?? ''}`)
+      return t.split(' ').every((w) => hay.includes(w))
+    })
     .sort((a, b) => (a.fecha_vencimiento || '9999').localeCompare(b.fecha_vencimiento || '9999'))
 
   return (
     <div className="space-y-3 p-3">
+      <div className="flex gap-2">
+        <input
+          type="search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar por nombre, marca o categoría"
+          className="min-w-0 flex-1 rounded-xl bg-slate-800 px-3 py-3 text-base"
+        />
+        <button
+          onClick={() => setSoloSinTacc(!soloSinTacc)}
+          className="min-h-[48px] shrink-0 rounded-xl px-3 text-sm font-bold"
+          style={soloSinTacc ? { background: accent, color: '#fff' } : { background: '#1e293b', color: '#cbd5e1' }}
+        >
+          Sin TACC
+        </button>
+      </div>
       <div className="flex gap-2">
         {FILTROS.map((f) => (
           <Chip key={f} active={filtro === f} color={accent} onClick={() => setFiltro(f)}>
@@ -102,7 +132,7 @@ export default function InventoryView() {
         const s = semaforo(daysUntil(i.fecha_vencimiento))
         return (
           <div key={i.id_item} className="rounded-2xl bg-slate-800 p-3">
-            <div className="flex items-center gap-3">
+            <div className="flex cursor-pointer items-center gap-3" onClick={() => setEditing(i)}>
               <span className="h-4 w-4 shrink-0 rounded-full" style={{ background: s.color }} />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold">{i.nombre}</p>
@@ -139,6 +169,51 @@ export default function InventoryView() {
           </div>
         )
       })}
+
+      {editing && <EditItemSheet item={editing} onClose={() => setEditing(null)} />}
     </div>
+  )
+}
+
+function EditItemSheet({ item, onClose }: { item: InventoryItem; onClose: () => void }) {
+  const { accent, updateStatus, upsertCatalog, db } = useApp()
+  const [venc, setVenc] = useState(item.fecha_vencimiento || '')
+  const [ubic, setUbic] = useState(item.ubicacion)
+  const [precio, setPrecio] = useState(String(num(item.precio_pagado) || ''))
+
+  const guardar = () => {
+    const patch: Parameters<typeof updateStatus>[1] = {}
+    if (venc !== item.fecha_vencimiento) patch.fecha_vencimiento = venc
+    if (ubic !== item.ubicacion) patch.ubicacion = ubic
+    const p = num(precio)
+    if (p !== num(item.precio_pagado)) patch.precio_pagado = p
+    if (Object.keys(patch).length) updateStatus(item.id_item, patch)
+    if (patch.precio_pagado !== undefined && p > 0) {
+      const cat = db.catalogo.find((c) => String(c.ean) === String(item.ean))
+      if (cat) upsertCatalog({ ...cat, ultimo_precio: p })
+    }
+    onClose()
+  }
+
+  return (
+    <Sheet title={item.nombre} onClose={onClose}>
+      <Label>Vencimiento</Label>
+      <input type="date" value={venc} onChange={(e) => setVenc(e.target.value)} className="w-full rounded-xl bg-slate-800 px-3 py-3 text-base" />
+      <Label>Ubicación</Label>
+      <div className="flex gap-2">
+        {UBICACIONES.map((u) => (
+          <Chip key={u} active={ubic === u} color={accent} onClick={() => setUbic(u)}>
+            {u}
+          </Chip>
+        ))}
+      </div>
+      <Label>Precio pagado</Label>
+      <input inputMode="decimal" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="$" className="w-full rounded-xl bg-slate-800 px-3 py-3 text-base" />
+      <div className="mt-4">
+        <BigButton color={accent} onClick={guardar}>
+          Guardar cambios
+        </BigButton>
+      </div>
+    </Sheet>
   )
 }

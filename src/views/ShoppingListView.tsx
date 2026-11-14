@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { isActiveItem, useApp } from '../store'
 import type { ShoppingItem } from '../types'
 import { money, num } from '../utils'
@@ -13,9 +13,19 @@ interface Line {
   partes: [string, number][]
 }
 
+const SIN_COMERCIO = 'Sin comercio definido'
+
 export default function ShoppingListView() {
-  const { db, activeHome, accent, settings, toggleShopping } = useApp()
+  const { db, activeHome, accent, settings, toggleShopping, sync } = useApp()
   const [unificada, setUnificada] = useState(false)
+
+  // Mientras esta vista está abierta, refresca cada 25 s para ver lo que tachan los demás.
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') void sync(true)
+    }, 25000)
+    return () => clearInterval(t)
+  }, [sync])
 
   const lines = useMemo<Line[]>(() => {
     const homes = unificada ? settings.homes : [activeHome]
@@ -29,15 +39,16 @@ export default function ShoppingListView() {
       const falta = Math.max(0, num(r.stock_minimo) - stock)
       if (!falta) continue
       const cat = db.catalogo.find((c) => String(c.ean) === ean)
-      // Comercio más barato según las compras registradas.
-      const compras = db.inventario.filter((i) => String(i.ean) === ean && num(i.precio_pagado) > 0)
-      const barato = compras.sort((a, b) => num(a.precio_pagado) - num(b.precio_pagado))[0]?.comercio ?? ''
+      // Comercio más barato: el de la compra de menor precio unitario en el historial del inventario.
+      const compras = db.inventario
+        .filter((i) => String(i.ean) === ean && num(i.precio_pagado) > 0 && i.comercio)
+        .sort((a, b) => num(a.precio_pagado) - num(b.precio_pagado))
       const l = map.get(ean) ?? {
         ean,
         nombre: cat?.nombre || db.inventario.find((i) => String(i.ean) === ean)?.nombre || ean,
         faltante: 0,
-        precio: num(cat?.ultimo_precio),
-        barato,
+        precio: num(cat?.ultimo_precio) || num(compras[0]?.precio_pagado),
+        barato: compras[0]?.comercio ?? '',
         partes: [],
       }
       l.faltante += falta
@@ -68,7 +79,44 @@ export default function ShoppingListView() {
     }
   }
 
-  const total = lines.filter((l) => !comprado(l)).reduce((s, l) => s + l.faltante * l.precio, 0)
+  const pendientes = lines.filter((l) => !comprado(l))
+  const total = pendientes.reduce((s, l) => s + l.faltante * l.precio, 0)
+
+  const enviarWhatsApp = async () => {
+    const grupos = new Map<string, Line[]>()
+    for (const l of pendientes) {
+      const k = l.barato || SIN_COMERCIO
+      grupos.set(k, [...(grupos.get(k) ?? []), l])
+    }
+    const orden = [...grupos.keys()].sort((a, b) =>
+      a === SIN_COMERCIO ? 1 : b === SIN_COMERCIO ? -1 : a.localeCompare(b),
+    )
+    const out: string[] = [
+      unificada
+        ? `🛒 *Compra unificada* (${settings.homes.join(' + ')})`
+        : `🛒 *Lista de compras – ${activeHome}*`,
+    ]
+    for (const k of orden) {
+      out.push('', `*${k}*`)
+      for (const l of grupos.get(k)!) {
+        const costo = l.precio ? ` (~${money(l.faltante * l.precio)})` : ''
+        const detalle =
+          unificada && l.partes.length > 1 ? ` [${l.partes.map(([h, n]) => `${h}: ${n}`).join(', ')}]` : ''
+        out.push(`[ ] ${l.faltante} x ${l.nombre}${costo}${detalle}`)
+      }
+    }
+    out.push('', `💰 *Total estimado: ${money(total)}*`)
+    const text = out.join('\n')
+    if (navigator.share) {
+      try {
+        await navigator.share({ text })
+      } catch {
+        /* canceló */
+      }
+      return
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
+  }
 
   return (
     <div className="space-y-3 p-3">
@@ -92,6 +140,14 @@ export default function ShoppingListView() {
         <p className="text-sm opacity-90">Presupuesto estimado pendiente</p>
         <p className="text-3xl font-extrabold">{money(total)}</p>
       </div>
+
+      <button
+        onClick={() => void enviarWhatsApp()}
+        disabled={pendientes.length === 0}
+        className="min-h-[52px] w-full rounded-2xl bg-emerald-600 text-base font-bold text-white active:scale-[0.98] disabled:opacity-40"
+      >
+        📲 Enviar por WhatsApp
+      </button>
 
       {lines.length === 0 && (
         <p className="py-8 text-center text-slate-400">
