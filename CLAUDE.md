@@ -63,3 +63,8 @@ React 18 + TypeScript + Vite 8 + Tailwind CSS 3 + `vite-plugin-pwa` + `html5-qrc
 - "Comercio más barato" en la lista de compras se deduce del menor `precio_pagado` registrado para ese EAN.
 - La `GEMINI_API_KEY` vive solo en `localStorage` del dispositivo; nunca se commitea.
 - El repo es público: no commitear la URL del Apps Script ni claves.
+
+## Notas de operación
+- **Gemini:** `src/gemini.ts` prueba `GEMINI_MODELS` (en `config.ts`) en orden y salta al siguiente si Google retira un modelo ("no longer available", 404). El botón de Ajustes muestra qué modelo respondió.
+- **Búsqueda de productos:** las tres bases se piden en paralelo con tope de 3,5 s; si Open Food Facts devuelve un producto con nombre no se espera a las otras (Open Products Facts puede tardar más de 15 s).
+- **Escáner:** solo EAN-13 con validación del dígito verificador (EAN-8/UPC-A generaban lecturas falsas). `ErrorBoundary` en `main.tsx` muestra el error en vez de una pantalla en blanco.

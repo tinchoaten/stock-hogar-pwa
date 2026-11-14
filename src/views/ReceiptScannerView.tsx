@@ -2,7 +2,8 @@ import { useRef, useState } from 'react'
 import { Camera, Link2, X } from 'lucide-react'
 import BarcodeScanner from '../components/BarcodeScanner'
 import { BigButton, Chip, Label, Sheet } from '../components/ui'
-import { COMERCIOS, GEMINI_MODEL, UBICACIONES } from '../config'
+import { COMERCIOS, UBICACIONES } from '../config'
+import { generate, textOf } from '../gemini'
 import { useApp } from '../store'
 import type { Comercio, InventoryItem } from '../types'
 import { useProductResolver } from '../useProduct'
@@ -66,22 +67,11 @@ export default function ReceiptScannerView() {
     setRows([])
     try {
       const b64 = await compress(file)
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${settings.geminiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              { parts: [{ text: PROMPT }, { inline_data: { mime_type: 'image/jpeg', data: b64 } }] },
-            ],
-            generationConfig: { responseMimeType: 'application/json', temperature: 0 },
-          }),
-        },
-      )
-      const json = await res.json()
-      if (!res.ok) throw new Error(json?.error?.message ?? `HTTP ${res.status}`)
-      const text: string = json.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}'
+      const json = await generate(settings.geminiKey, {
+        contents: [{ parts: [{ text: PROMPT }, { inline_data: { mime_type: 'image/jpeg', data: b64 } }] }],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0 },
+      })
+      const text: string = textOf(json) || '{}'
       const parsed = JSON.parse(text)
       const list: { descripcion: string; cantidad: number; precio_unitario: number }[] = Array.isArray(
         parsed,

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Copy, Plus, Share2, Trash2 } from 'lucide-react'
 import { BigButton, Label } from '../components/ui'
-import { GEMINI_MODEL } from '../config'
+import { generate, textOf } from '../gemini'
 import { inviteLink, parseInviteInput } from '../invite'
 import { useApp } from '../store'
 import type { DB } from '../types'
@@ -31,18 +31,9 @@ export default function SettingsView() {
     setIaBusy(true)
     setIaTest(null)
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${k}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: 'Respondé solo con la palabra OK' }] }] }),
-        },
-      )
-      const j = await res.json()
-      if (!res.ok) throw new Error(j?.error?.message ?? `HTTP ${res.status}`)
-      const txt = String(j.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim()
-      setIaTest({ ok: true, msg: `Gemini respondió: “${txt || '(sin texto)'}”. La clave funciona.` })
+      const j = await generate(k, { contents: [{ parts: [{ text: 'Respondé solo con la palabra OK' }] }] })
+      const txt = textOf(j)
+      setIaTest({ ok: true, msg: `Gemini (${j._model}) respondió: “${txt || '(sin texto)'}”. La clave funciona.` })
     } catch (e) {
       setIaTest({ ok: false, msg: `Falló: ${(e as Error).message}` })
     } finally {

@@ -40,9 +40,15 @@ export interface OFFResult {
 async function fetchFacts(host: string, ean: string): // eslint-disable-next-line @typescript-eslint/no-explicit-any
 Promise<Record<string, any> | null> {
   try {
-    const res = await fetch(`https://${host}/api/v2/product/${ean}.json`)
-    const json = await res.json()
-    return json?.status === 1 && json.product ? json.product : null
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 3500)
+    try {
+      const res = await fetch(`https://${host}/api/v2/product/${ean}.json`, { signal: ctrl.signal })
+      const json = await res.json()
+      return json?.status === 1 && json.product ? json.product : null
+    } finally {
+      clearTimeout(t)
+    }
   } catch {
     return null
   }
@@ -64,11 +70,19 @@ export async function lookupOpenFoodFacts(ean: string): Promise<OFFResult> {
     sin_tacc: false,
   }
   try {
-    let p = await fetchFacts('world.openfoodfacts.org', ean)
+    // Las tres bases se consultan a la vez, cada una con tope de 3,5 s; Open Food Facts tiene prioridad.
+    const foodP = fetchFacts('world.openfoodfacts.org', ean)
+    const prodsP = fetchFacts('world.openproductsfacts.org', ean)
+    const beautyP = fetchFacts('world.openbeautyfacts.org', ean)
+    const named = (x: Record<string, any> | null) => !!x && !!(x.product_name || x.product_name_es)
+    const food = await foodP
+    // Si es un alimento conocido no se espera a las otras bases (Open Products Facts suele ser muy lenta).
+    const [prods, beauty] = named(food) ? [null, null] : await Promise.all([prodsP, beautyP])
+    let p: Record<string, any> | null = named(food) ? food : null
     let noAlimento = false
-    if (!p || !(p.product_name || p.product_name_es)) {
-      p = (await fetchFacts('world.openproductsfacts.org', ean)) ?? (await fetchFacts('world.openbeautyfacts.org', ean))
-      noAlimento = !!p
+    if (!p) {
+      p = named(prods) ? prods : named(beauty) ? beauty : (food ?? prods ?? beauty)
+      noAlimento = !!p && p !== food
     }
     if (!p) return { found: false, item: blank }
     const categoria: string = String(

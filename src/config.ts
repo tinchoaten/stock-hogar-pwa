@@ -31,4 +31,5 @@ export const STORAGE_KEYS = {
   lastSync: 'sh.lastSync',
 }
 
-export const GEMINI_MODEL = 'gemini-2.5-flash'
+// Se prueban en orden; si Google retira uno, se usa el siguiente.
+export const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-2.5-flash']

@@ -52,8 +52,8 @@ export const num = (v: unknown, fallback = 0): number => {
 export const money = (n: number) =>
   n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
 
-export const norm = (s: string) =>
-  s
+export const norm = (s: unknown) =>
+  String(s ?? '')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')

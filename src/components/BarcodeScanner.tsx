@@ -9,6 +9,14 @@ interface Props {
   height?: number
 }
 
+/** Dígito verificador EAN-13. */
+function validEan13(code: string): boolean {
+  if (!/^\d{13}$/.test(code)) return false
+  let sum = 0
+  for (let i = 0; i < 12; i++) sum += Number(code[i]) * (i % 2 === 0 ? 1 : 3)
+  return (10 - (sum % 10)) % 10 === Number(code[12])
+}
+
 /** Lector continuo EAN-13 con cámara trasera. */
 export default function BarcodeScanner({ onScan, enabled = true, height = 220 }: Props) {
   const idRef = useRef(`reader-${Math.random().toString(36).slice(2, 8)}`)
@@ -21,8 +29,9 @@ export default function BarcodeScanner({ onScan, enabled = true, height = 220 }:
   onScanRef.current = onScan
   enabledRef.current = enabled
 
-  const handle = (raw: string) => {
+  const handle = (raw: string, manual = false) => {
     const code = raw.length === 12 ? `0${raw}` : raw // UPC-A = EAN-13 con un 0 adelante
+    if (!manual && !validEan13(code)) return // lectura corrupta: se descarta sin sonar
     const now = Date.now()
     if (!enabledRef.current) return
     if (code === last.current.code && now - last.current.at < 2500) return
@@ -35,11 +44,8 @@ export default function BarcodeScanner({ onScan, enabled = true, height = 220 }:
   useEffect(() => {
     const scanner = new Html5Qrcode(idRef.current, {
       verbose: false,
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.UPC_A,
-      ],
+      // Solo EAN-13: con EAN-8/UPC-A el lector confunde fragmentos de un EAN-13 con códigos cortos falsos.
+      formatsToSupport: [Html5QrcodeSupportedFormats.EAN_13],
       experimentalFeatures: { useBarCodeDetectorIfSupported: true },
     })
     let started = false
@@ -107,7 +113,7 @@ export default function BarcodeScanner({ onScan, enabled = true, height = 220 }:
         onSubmit={(e) => {
           e.preventDefault()
           if (manual.trim()) {
-            handle(manual.trim())
+            handle(manual.trim(), true)
             setManual('')
           }
         }}
