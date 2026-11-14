@@ -1,4 +1,4 @@
-import { lazy, Suspense, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Copy, Plus, Share2, Trash2 } from 'lucide-react'
 import { BigButton, Label } from '../components/ui'
 import { inviteLink, parseInviteInput } from '../invite'
@@ -19,6 +19,24 @@ export default function SettingsView() {
   const [withKey, setWithKey] = useState(true)
   const [pasted, setPasted] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // Autoguardado: alias, clave de Gemini y URL se guardan al salir del campo y al salir de la pantalla,
+  // para que no se pierdan si no se toca "Guardar ajustes".
+  const draft = useRef({ alias, key, url })
+  draft.current = { alias, key, url }
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
+  const commit = () => {
+    const d = draft.current
+    const s = settingsRef.current
+    const next = { alias: d.alias.trim(), geminiKey: d.key.trim(), scriptUrl: d.url.trim() }
+    if (next.alias !== s.alias || next.geminiKey !== s.geminiKey || next.scriptUrl !== s.scriptUrl) {
+      setSettings({ ...s, ...next })
+    }
+  }
+  const commitRef = useRef(commit)
+  commitRef.current = commit
+  useEffect(() => () => commitRef.current(), [])
 
   const guardar = () => {
     const clean = homes.map((h) => h.trim()).filter(Boolean)
@@ -120,14 +138,32 @@ export default function SettingsView() {
   return (
     <div className="space-y-1 p-3">
       <Label>Mi nombre / alias</Label>
-      <input value={alias} onChange={(e) => setAlias(e.target.value)} placeholder="Ej: Juan" className={input} />
+      <input value={alias} onChange={(e) => setAlias(e.target.value)} onBlur={commit} placeholder="Ej: Juan" className={input} autoComplete="off" />
 
       <Label>GEMINI_API_KEY</Label>
-      <input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="AIza…" className={input} autoCapitalize="off" />
-      <p className="text-xs text-slate-500">Se guarda solo en este dispositivo (localStorage).</p>
+      {/* type=text + text-security: evita que iOS lo trate como contraseña y lo autocomplete o borre */}
+      <input
+        type="text"
+        value={key}
+        onChange={(e) => setKey(e.target.value)}
+        onBlur={commit}
+        placeholder="AIza…"
+        className={input}
+        style={{ WebkitTextSecurity: 'disc' } as React.CSSProperties}
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
+        spellCheck={false}
+        name="gemini-key"
+      />
+      <p className="text-xs" style={{ color: settings.geminiKey ? '#4ade80' : '#fbbf24' }}>
+        {settings.geminiKey
+          ? `✓ Clave guardada en este dispositivo (${settings.geminiKey.slice(0, 4)}…${settings.geminiKey.slice(-4)})`
+          : '⚠ Todavía no hay clave guardada en este dispositivo'}
+      </p>
 
       <Label>APPS_SCRIPT_URL</Label>
-      <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://script.google.com/macros/s/…/exec" className={input} autoCapitalize="off" />
+      <input value={url} onChange={(e) => setUrl(e.target.value)} onBlur={commit} placeholder="https://script.google.com/macros/s/…/exec" className={input} autoCapitalize="off" />
 
       <Label>Hogares</Label>
       <div className="space-y-2">
