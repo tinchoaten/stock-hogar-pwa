@@ -1,6 +1,6 @@
 import { useApp, type ItemPatch } from './store'
 import type { InventoryItem } from './types'
-import { addDays, num, today } from './utils'
+import { addDays, num, sinVencimiento, today } from './utils'
 
 /** Acciones de un toque sobre un ítem de inventario, todas con "Deshacer". */
 export function useItemActions() {
@@ -10,6 +10,8 @@ export function useItemActions() {
     const c = db.catalogo.find((x) => String(x.ean) === String(item.ean))
     return num(c?.dias_vida_util_abierto, 60) || 60
   }
+
+  const catOf = (item: InventoryItem) => db.catalogo.find((x) => String(x.ean) === String(item.ean))
 
   /** Aplica el parche y ofrece restaurar los valores anteriores. */
   const withUndo = (item: InventoryItem, patch: ItemPatch, msg: string) => {
@@ -22,16 +24,19 @@ export function useItemActions() {
 
   return {
     diasAbierto,
+    sinVencimiento: (item: InventoryItem) => sinVencimiento(catOf(item)),
     baja: (item: InventoryItem) =>
       withUndo(item, { estado: 'Consumido', fecha_baja: today() }, 'Consumido'),
     abrir: (item: InventoryItem) =>
       withUndo(
         item,
-        {
-          estado: 'Abierto',
-          fecha_apertura: today(),
-          fecha_vencimiento: addDays(today(), diasAbierto(item)),
-        },
+        sinVencimiento(catOf(item))
+          ? { estado: 'Abierto', fecha_apertura: today() }
+          : {
+              estado: 'Abierto',
+              fecha_apertura: today(),
+              fecha_vencimiento: addDays(today(), diasAbierto(item)),
+            },
         'Abierto',
       ),
     congelar: (item: InventoryItem) =>

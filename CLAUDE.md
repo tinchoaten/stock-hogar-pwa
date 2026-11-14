@@ -49,6 +49,12 @@ React 18 + TypeScript + Vite 8 + Tailwind CSS 3 + `vite-plugin-pwa` + `html5-qrc
 - Cada renglón del ticket se edita antes de cargar: cantidad (− / +), precio unitario, "Cambiar EAN" / "Vincular EAN" y quitar (✕). El % de descuento global se aplica al cargar (`neto()`), así que se puede cambiar después de leer el ticket. Los renglones sin EAN no se cargan y se avisa cuántos son.
 - Cola de POST (`store.tsx`): un error de **red** reintenta indefinidamente; un rechazo del **servidor** (`ServerRejectedError`, `status != "ok"`) descarta ese cambio, avisa con un banner ("rechazó") y sigue con los demás, para no bloquear la cola.
 
+## Productos que no son comida
+- **Tipo de producto** (Alimento / Limpieza-Hogar) en el formulario de ingreso; se guarda en `categoria` del catálogo (`Limpieza/Hogar`). Limpieza: vida útil 730 d y sin acortarla al abrir.
+- **Sin vencimiento:** `dias_vida_util_cerrado = 0` en el catálogo (helpers `sinVencimiento` / `vidaCerrada` en `utils.ts`; una celda vacía NO cuenta como 0). Los ítems se guardan con `fecha_vencimiento = ''`, así que no entran en avisos, semáforo ni desperdicio (la app y `enviarResumenVencimientosDiario` ya ignoran fechas vacías). "Abrir" no toca el vencimiento.
+- **Búsqueda:** Open Food Facts → Open Products Facts → Open Beauty Facts (los dos últimos se marcan como Limpieza/Hogar).
+- **Sin código de barras:** botón "Agregar producto sin código" crea un EAN propio `SC-<nombre normalizado>`; mismo nombre = mismo producto. Se da de baja desde Stock (no se puede escanear).
+
 ## Convenciones y supuestos
 - Estados de ítem (los que evalúa `Code.gs`): `Cerrado`, `Abierto`, `Consumido`. Un ítem está activo si no tiene `fecha_baja` y no está `Consumido`. Por compatibilidad, `En Stock` se muestra como `Cerrado` y `Baja` como `Consumido`.
 - Fechas como `YYYY-MM-DD` en hora local.

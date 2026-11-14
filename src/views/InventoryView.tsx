@@ -198,6 +198,11 @@ function EditItemSheet({ item, onClose }: { item: InventoryItem; onClose: () => 
   return (
     <Sheet title={item.nombre} onClose={onClose}>
       <Label>Vencimiento</Label>
+      <div className="mb-2 flex">
+        <Chip active={!venc} color={accent} onClick={() => setVenc('')}>
+          Sin vencimiento
+        </Chip>
+      </div>
       <input type="date" value={venc} onChange={(e) => setVenc(e.target.value)} className="w-full rounded-xl bg-slate-800 px-3 py-3 text-base" />
       <Label>Ubicación</Label>
       <div className="flex gap-2">

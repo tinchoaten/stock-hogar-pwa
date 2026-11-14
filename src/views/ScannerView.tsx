@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Mic } from 'lucide-react'
+import { Mic, Plus } from 'lucide-react'
 import BarcodeScanner from '../components/BarcodeScanner'
 import { BigButton, Chip, Label, Sheet } from '../components/ui'
 import { COMERCIOS, UBICACIONES } from '../config'
@@ -7,7 +7,20 @@ import { isActiveItem, useApp } from '../store'
 import type { CatalogItem, Comercio, InventoryItem, Ubicacion } from '../types'
 import { useItemActions } from '../useItemActions'
 import { useProductResolver } from '../useProduct'
-import { addDays, addMonths, daysUntil, estadoLabel, num, today, uid } from '../utils'
+import {
+  addDays,
+  addMonths,
+  daysUntil,
+  esLimpieza,
+  estadoLabel,
+  norm,
+  num,
+  sinVencimiento,
+  TIPO_LIMPIEZA,
+  today,
+  uid,
+  vidaCerrada,
+} from '../utils'
 import { listen, parseVoice, speechSupported } from '../voice'
 
 type Mode = 'ingreso' | 'salida'
@@ -35,7 +48,7 @@ export default function ScannerView() {
         ean: item.ean,
         nombre: item.nombre,
         fecha_ingreso: today(),
-        fecha_vencimiento: addDays(today(), num(item.dias_vida_util_cerrado, 180) || 180),
+        fecha_vencimiento: vidaCerrada(item) === null ? '' : addDays(today(), vidaCerrada(item) ?? 180),
         ubicacion,
         estado: 'Cerrado',
         fecha_apertura: '',
@@ -54,6 +67,7 @@ export default function ScannerView() {
   const [msg, setMsg] = useState('')
   const [product, setProduct] = useState<CatalogItem | null>(null)
   const [needsData, setNeedsData] = useState(false)
+  const [manualOpen, setManualOpen] = useState(false)
 
   const onScan = async (ean: string) => {
     setBusy(true)
@@ -118,13 +132,32 @@ export default function ScannerView() {
         </div>
       )}
 
-      <BarcodeScanner onScan={onScan} enabled={!product && !busy} />
+      <BarcodeScanner onScan={onScan} enabled={!product && !busy && !manualOpen} />
+      {mode === 'ingreso' && (
+        <button
+          onClick={() => setManualOpen(true)}
+          className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-600 text-sm font-semibold text-slate-300 active:scale-[0.98]"
+        >
+          <Plus size={18} /> Agregar producto sin código (esponjas, paños…)
+        </button>
+      )}
       {msg && <p className="rounded-xl bg-slate-800 p-3 text-center text-sm">{msg}</p>}
       <p className="text-center text-xs text-slate-500">
         {db.inventario.filter((i) => i.hogar_id === activeHome && isActiveItem(i)).length}{' '}
         productos en stock en {activeHome}
       </p>
 
+      {manualOpen && (
+        <SinCodigoSheet
+          onClose={() => setManualOpen(false)}
+          onPick={(item, isNew) => {
+            setManualOpen(false)
+            setNeedsData(isNew)
+            setProduct(item)
+            setMode('ingreso')
+          }}
+        />
+      )}
       {product && mode === 'ingreso' && (
         <IngresoSheet product={product} needsData={needsData} onClose={close} />
       )}
@@ -144,7 +177,9 @@ function IngresoSheet({
 }) {
   const { db, activeHome, accent, addInventory, upsertCatalog, upsertRule } = useApp()
   const rule = db.reglasHogar.find((r) => r.hogar_id === activeHome && String(r.ean) === product.ean)
-  const vidaCerrado = num(product.dias_vida_util_cerrado, 180) || 180
+  const [tipo, setTipo] = useState<'alimento' | 'limpieza'>(esLimpieza(product.categoria) ? 'limpieza' : 'alimento')
+  const [sinVenc, setSinVenc] = useState(sinVencimiento(product))
+  const vidaCerrado = vidaCerrada(product) ?? (esLimpieza(product.categoria) ? 730 : 180)
 
   const [nombre, setNombre] = useState(product.nombre)
   const [comercio, setComercio] = useState<Comercio>('Supermercado')
@@ -177,6 +212,11 @@ function IngresoSheet({
     )
   }
 
+  const cambiarTipo = (t: 'alimento' | 'limpieza') => {
+    setTipo(t)
+    setVenc(addDays(today(), t === 'limpieza' ? 730 : esLimpieza(product.categoria) ? 180 : (vidaCerrada(product) ?? 180)))
+  }
+
   const guardar = () => {
     const p = num(precio)
     const name = nombre.trim() || product.ean
@@ -187,7 +227,7 @@ function IngresoSheet({
       ean: product.ean,
       nombre: name,
       fecha_ingreso,
-      fecha_vencimiento: venc,
+      fecha_vencimiento: sinVenc ? '' : venc,
       ubicacion,
       estado: 'Cerrado',
       fecha_apertura: '',
@@ -196,8 +236,28 @@ function IngresoSheet({
       comercio,
     }))
     addInventory(items)
-    if (needsData || p !== num(product.ultimo_precio) || name !== product.nombre) {
-      upsertCatalog({ ...product, nombre: name, ultimo_precio: p || num(product.ultimo_precio) })
+    const categoria =
+      tipo === 'limpieza' ? TIPO_LIMPIEZA : esLimpieza(product.categoria) ? 'Alimentos' : product.categoria
+    const diasCerrado = sinVenc
+      ? 0
+      : tipo === 'limpieza'
+        ? 730
+        : esLimpieza(product.categoria)
+          ? 180
+          : (vidaCerrada(product) ?? 180)
+    const diasAbierto =
+      tipo === 'limpieza' ? 730 : esLimpieza(product.categoria) ? 60 : num(product.dias_vida_util_abierto, 60)
+    const catChanged =
+      categoria !== product.categoria || diasCerrado !== Number(product.dias_vida_util_cerrado)
+    if (needsData || catChanged || p !== num(product.ultimo_precio) || name !== product.nombre) {
+      upsertCatalog({
+        ...product,
+        nombre: name,
+        categoria,
+        dias_vida_util_cerrado: diasCerrado,
+        dias_vida_util_abierto: diasAbierto,
+        ultimo_precio: p || num(product.ultimo_precio),
+      })
     }
     if (!rule) {
       upsertRule({ hogar_id: activeHome, ean: product.ean, stock_minimo: 1, ubicacion_habitual: ubicacion })
@@ -219,6 +279,16 @@ function IngresoSheet({
           />
         </>
       )}
+
+      <Label>Tipo de producto</Label>
+      <div className="flex gap-2">
+        <Chip active={tipo === 'alimento'} color={accent} onClick={() => cambiarTipo('alimento')}>
+          Alimento
+        </Chip>
+        <Chip active={tipo === 'limpieza'} color={accent} onClick={() => cambiarTipo('limpieza')}>
+          Limpieza / Hogar
+        </Chip>
+      </div>
 
       <Label>Comercio</Label>
       <div className="flex gap-2">
@@ -257,6 +327,19 @@ function IngresoSheet({
       </div>
 
       <Label>Vencimiento</Label>
+      <button
+        onClick={() => setSinVenc(!sinVenc)}
+        className="mb-2 flex min-h-[48px] w-full items-center justify-between rounded-xl bg-slate-800 px-3 text-sm font-semibold"
+      >
+        <span>Sin vencimiento (no avisar)</span>
+        <span className="relative h-7 w-12 rounded-full transition" style={{ background: sinVenc ? accent : '#475569' }}>
+          <span className="absolute top-1 h-5 w-5 rounded-full bg-white transition-all" style={{ left: sinVenc ? 24 : 4 }} />
+        </span>
+      </button>
+      {sinVenc ? (
+        <p className="rounded-xl bg-slate-800 p-3 text-center text-sm text-slate-400">Este producto no vence.</p>
+      ) : (
+        <>
       <div className="flex gap-2">
         <Chip onClick={() => setVenc(addDays(today(), 7))}>+7d</Chip>
         <Chip onClick={() => setVenc(addDays(today(), 15))}>+15d</Chip>
@@ -269,6 +352,8 @@ function IngresoSheet({
         onChange={(e) => setVenc(e.target.value)}
         className="mt-2 w-full rounded-xl bg-slate-800 px-3 py-3 text-base"
       />
+        </>
+      )}
 
       <button
         onClick={dictar}
@@ -356,7 +441,7 @@ function SalidaSheet({ product, onClose }: { product: CatalogItem; onClose: () =
           Se Terminó (Basura)
         </BigButton>
         <BigButton color="#d97706" onClick={() => run(() => acts.abrir(item))}>
-          Lo Abrí Hoy (+{acts.diasAbierto(item)} días)
+          {acts.sinVencimiento(item) ? 'Lo Abrí Hoy' : `Lo Abrí Hoy (+${acts.diasAbierto(item)} días)`}
         </BigButton>
         <BigButton color="#0284c7" onClick={() => run(() => acts.congelar(item))}>
           Pasar a Freezer (+90d)
@@ -374,6 +459,77 @@ function SalidaSheet({ product, onClose }: { product: CatalogItem; onClose: () =
           ))}
         </div>
       )}
+    </Sheet>
+  )
+}
+
+/** Productos sin código de barras: se identifican con un código propio SC-<nombre>. */
+function SinCodigoSheet({
+  onPick,
+  onClose,
+}: {
+  onPick: (item: CatalogItem, isNew: boolean) => void
+  onClose: () => void
+}) {
+  const { db, accent } = useApp()
+  const [nombre, setNombre] = useState('')
+  const existentes = db.catalogo.filter((c) => String(c.ean).startsWith('SC-'))
+
+  const continuar = () => {
+    const name = nombre.trim()
+    if (!name) return
+    const ean = 'SC-' + norm(name).replace(/ /g, '-').slice(0, 40)
+    const prev = db.catalogo.find((c) => String(c.ean) === ean)
+    if (prev) return onPick(prev, false)
+    onPick(
+      {
+        ean,
+        nombre: name,
+        marca: '',
+        categoria: TIPO_LIMPIEZA,
+        dias_vida_util_cerrado: 0, // 0 = no vence
+        dias_vida_util_abierto: 730,
+        ultimo_precio: 0,
+        sin_tacc: false,
+      },
+      true,
+    )
+  }
+
+  return (
+    <Sheet title="Producto sin código" onClose={onClose}>
+      {existentes.length > 0 && (
+        <>
+          <Label>Ya cargados</Label>
+          <div className="flex flex-wrap gap-2">
+            {existentes.map((c) => (
+              <button
+                key={String(c.ean)}
+                onClick={() => onPick(c, false)}
+                className="min-h-[44px] rounded-xl bg-slate-800 px-3 text-sm font-semibold active:scale-95"
+              >
+                {c.nombre}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      <Label>Nombre del producto</Label>
+      <input
+        value={nombre}
+        onChange={(e) => setNombre(e.target.value)}
+        placeholder="Ej: Esponja de cocina"
+        className="w-full rounded-xl bg-slate-800 px-3 py-3 text-base"
+        autoFocus
+      />
+      <p className="mt-1 text-xs text-slate-500">
+        Si repetís el mismo nombre, se suma al mismo producto. Para dar de baja usá la pestaña Stock.
+      </p>
+      <div className="mt-4">
+        <BigButton color={accent} onClick={continuar} disabled={!nombre.trim()}>
+          Continuar
+        </BigButton>
+      </div>
     </Sheet>
   )
 }

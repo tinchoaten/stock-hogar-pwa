@@ -6,7 +6,7 @@ import { COMERCIOS, GEMINI_MODEL, UBICACIONES } from '../config'
 import { useApp } from '../store'
 import type { Comercio, InventoryItem } from '../types'
 import { useProductResolver } from '../useProduct'
-import { addDays, money, norm, num, today, uid } from '../utils'
+import { addDays, money, norm, num, today, uid, vidaCerrada } from '../utils'
 
 interface Row {
   descripcion: string
@@ -127,7 +127,7 @@ export default function ReceiptScannerView() {
       const cat = db.catalogo.find((c) => String(c.ean) === r.ean)
       const rule = db.reglasHogar.find((x) => x.hogar_id === activeHome && String(x.ean) === r.ean)
       const ubic = UBICACIONES.find((u) => u === rule?.ubicacion_habitual) ?? 'Alacena'
-      const vida = num(cat?.dias_vida_util_cerrado, 180) || 180
+      const vida = vidaCerrada(cat)
       for (let k = 0; k < r.cantidad; k++) {
         items.push({
           id_item: uid(),
@@ -135,7 +135,7 @@ export default function ReceiptScannerView() {
           ean: r.ean,
           nombre: cat?.nombre || r.descripcion,
           fecha_ingreso: today(),
-          fecha_vencimiento: addDays(today(), vida),
+          fecha_vencimiento: vida === null ? '' : addDays(today(), vida),
           ubicacion: ubic,
           estado: 'Cerrado',
           fecha_apertura: '',

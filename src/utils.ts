@@ -93,9 +93,30 @@ export function vibrate(ms = 40) {
   }
 }
 
+export const TIPO_LIMPIEZA = 'Limpieza/Hogar'
+
+/** ¿Es un producto de limpieza / hogar / higiene (no alimento)? */
+export const esLimpieza = (categoria?: string) =>
+  /limpieza|hogar|higiene|detergente|lavandina|jabon|esponja|bazar|cleaning|household|hygiene/.test(norm(categoria ?? ''))
+
+/** 0 en dias_vida_util_cerrado = "sin vencimiento" (no confundir con celda vacía). */
+export function sinVencimiento(c?: { dias_vida_util_cerrado?: unknown } | null): boolean {
+  if (!c) return false
+  const raw = c.dias_vida_util_cerrado
+  return raw !== '' && raw !== null && raw !== undefined && Number(raw) === 0
+}
+
+/** Días de vida útil cerrado; null = no vence. */
+export function vidaCerrada(c?: { dias_vida_util_cerrado?: unknown } | null): number | null {
+  if (!c) return 180
+  if (sinVencimiento(c)) return null
+  return num(c.dias_vida_util_cerrado, 180) || 180
+}
+
 /** Vida útil estimada según categoría de Open Food Facts. */
 export function shelfLifeFor(categoria: string): { cerrado: number; abierto: number } {
   const c = norm(categoria)
+  if (esLimpieza(c)) return { cerrado: 730, abierto: 730 }
   if (/lacte|leche|yogur|queso|manteca|crema|dairy|milk|cheese|yogurt/.test(c))
     return { cerrado: 20, abierto: 5 }
   if (/carne|pollo|fiambre|embutido|pescado|meat|fish|sausage/.test(c))
