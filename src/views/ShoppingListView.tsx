@@ -45,7 +45,7 @@ export default function ShoppingListView() {
         .sort((a, b) => num(a.precio_pagado) - num(b.precio_pagado))
       const l = map.get(ean) ?? {
         ean,
-        nombre: cat?.nombre || db.inventario.find((i) => String(i.ean) === ean)?.nombre || ean,
+        nombre: String(cat?.nombre ?? '') || db.inventario.find((i) => String(i.ean) === ean)?.nombre || ean,
         faltante: 0,
         precio: num(cat?.ultimo_precio) || num(compras[0]?.precio_pagado),
         barato: compras[0]?.comercio ?? '',
@@ -55,7 +55,7 @@ export default function ShoppingListView() {
       l.partes.push([r.hogar_id, falta])
       map.set(ean, l)
     }
-    return [...map.values()].sort((a, b) => a.nombre.localeCompare(b.nombre))
+    return [...map.values()].sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)))
   }, [db, activeHome, unificada, settings.homes])
 
   const comprado = (l: Line) =>

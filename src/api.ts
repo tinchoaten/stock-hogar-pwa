@@ -28,18 +28,41 @@ export function dedupeById<T extends { id_item: string }>(list: T[]): T[] {
   })
 }
 
+const str = (v: unknown) => (v === undefined || v === null ? '' : String(v))
+
+/**
+ * Sheets convierte textos numéricos en números (un producto llamado "8790129604761" llega como número):
+ * los campos de texto se fuerzan a string para que .localeCompare, .trim, etc. no revienten.
+ */
+export function normalizeDB(d: DB): DB {
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const fix = <T,>(list: T[], keys: string[]): T[] =>
+    (list ?? []).map((r: any) => {
+      const o = { ...r }
+      for (const k of keys) if (k in o) o[k] = str(o[k])
+      return o
+    })
+  return {
+    catalogo: fix(d.catalogo, ['nombre', 'marca', 'categoria']),
+    reglasHogar: fix(d.reglasHogar, ['hogar_id', 'ubicacion_habitual']),
+    inventario: fix(d.inventario, ['nombre', 'hogar_id', 'ubicacion', 'estado', 'comercio']),
+    diccionario: fix(d.diccionario, ['alias_ticket', 'comercio']),
+    listaCompras: fix(d.listaCompras, ['nombre', 'hogar_id', 'comercio_mas_barato']),
+  }
+}
+
 export async function fetchAll(url: string): Promise<DB> {
   const res = await fetchBackend(url, {})
   const json = await res.json()
   if (json?.status !== 'ok' || !json.data) throw new Error(json?.message ?? 'Respuesta inválida')
   const d = json.data
-  return {
+  return normalizeDB({
     catalogo: d.catalogo ?? [],
     reglasHogar: d.reglasHogar ?? [],
     inventario: dedupeById(d.inventario ?? []),
     diccionario: d.diccionario ?? [],
     listaCompras: d.listaCompras ?? [],
-  }
+  })
 }
 
 /** El servidor respondió, pero rechazó el cambio: reintentar no sirve. */

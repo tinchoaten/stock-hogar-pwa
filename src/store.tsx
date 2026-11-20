@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { dedupeById, fetchAll, postPayload, ServerRejectedError } from './api'
+import { dedupeById, fetchAll, normalizeDB, postPayload, ServerRejectedError } from './api'
 import { DEFAULT_SETTINGS, EMPTY_DB, HOME_COLORS, STORAGE_KEYS } from './config'
 import { confirmInvite, takeInviteFromHash } from './invite'
 import type {
@@ -107,7 +107,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   })
   const [db, setDb] = useState<DB>(() => {
     const d = { ...EMPTY_DB, ...load<Partial<DB>>(STORAGE_KEYS.db, {}) }
-    return { ...d, inventario: dedupeById(d.inventario) }
+    return normalizeDB({ ...d, inventario: dedupeById(d.inventario) })
   })
   const [queue, setQueue] = useState<Payload[]>(() => load<Payload[]>(STORAGE_KEYS.queue, []))
   const [syncing, setSyncing] = useState(false)
