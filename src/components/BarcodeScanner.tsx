@@ -22,7 +22,8 @@ export default function BarcodeScanner({ onScan, enabled = true, height = 220 }:
   const idRef = useRef(`reader-${Math.random().toString(36).slice(2, 8)}`)
   const onScanRef = useRef(onScan)
   const enabledRef = useRef(enabled)
-  const last = useRef({ code: '', at: 0 })
+  // seen = última vez que la cámara VIO el código (aunque se haya ignorado): ventana deslizante.
+  const last = useRef({ code: '', seen: 0 })
   const [err, setErr] = useState('')
   const [info, setInfo] = useState('')
   const [manual, setManual] = useState('')
@@ -33,9 +34,11 @@ export default function BarcodeScanner({ onScan, enabled = true, height = 220 }:
     const code = raw.length === 12 ? `0${raw}` : raw // UPC-A = EAN-13 con un 0 adelante
     if (!manual && !validEan13(code)) return // lectura corrupta: se descarta sin sonar
     const now = Date.now()
-    if (!enabledRef.current) return
-    if (code === last.current.code && now - last.current.at < 2500) return
-    last.current = { code, at: now }
+    // Mismo código visto hace menos de 2 s: la cámara sigue apuntando al mismo producto, no es una unidad nueva.
+    // Para sumar otra unidad hay que sacar el código de cuadro (~2 s sin verlo) y volver a mostrarlo.
+    const repeated = !manual && code === last.current.code && now - last.current.seen < 2000
+    last.current = { code, seen: now }
+    if (repeated || !enabledRef.current) return
     beep()
     vibrate()
     onScanRef.current(code)

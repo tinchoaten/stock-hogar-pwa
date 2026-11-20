@@ -51,11 +51,11 @@ export function parseVoice(raw: string): VoiceResult {
 
   const cant = t.match(/(?:(\w+)\s+unidades?|cantidad\s+(?:de\s+)?(\w+)|x\s*(\w+))/)
   const c = cant ? toNum(cant[1] ?? cant[2] ?? cant[3]) : null
-  if (c !== null && c > 0) out.cantidad = Math.round(c)
+  if (c !== null && c > 0 && c <= 48) out.cantidad = Math.round(c)
   else {
     const first = t.match(/^(\w+)\b/)
     const n = first ? toNum(first[1]) : null
-    if (n !== null && n > 0 && n <= 48) out.cantidad = Math.round(n)
+    if (n !== null && n > 0 && n <= 12) out.cantidad = Math.round(n)
   }
   return out
 }

@@ -17,6 +17,17 @@ async function fetchBackend(url: string, init: RequestInit): Promise<Response> {
   }
 }
 
+/** Si por un reintento quedó el mismo id_item dos veces en la planilla, se muestra una sola. */
+export function dedupeById<T extends { id_item: string }>(list: T[]): T[] {
+  const seen = new Set<string>()
+  return list.filter((i) => {
+    const id = String(i.id_item)
+    if (seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
+}
+
 export async function fetchAll(url: string): Promise<DB> {
   const res = await fetchBackend(url, {})
   const json = await res.json()
@@ -25,7 +36,7 @@ export async function fetchAll(url: string): Promise<DB> {
   return {
     catalogo: d.catalogo ?? [],
     reglasHogar: d.reglasHogar ?? [],
-    inventario: d.inventario ?? [],
+    inventario: dedupeById(d.inventario ?? []),
     diccionario: d.diccionario ?? [],
     listaCompras: d.listaCompras ?? [],
   }

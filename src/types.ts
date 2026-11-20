@@ -61,6 +61,8 @@ export interface Settings {
   scriptUrl: string
   homes: string[]
   activeHome: string
+  /** Modelo de Gemini preferido (vacío = automático). */
+  geminiModel: string
 }
 
 export type Ubicacion = 'Alacena' | 'Heladera' | 'Freezer'

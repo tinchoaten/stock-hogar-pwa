@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { fetchAll, postPayload, ServerRejectedError } from './api'
+import { dedupeById, fetchAll, postPayload, ServerRejectedError } from './api'
 import { DEFAULT_SETTINGS, EMPTY_DB, HOME_COLORS, STORAGE_KEYS } from './config'
 import { confirmInvite, takeInviteFromHash } from './invite'
 import type {
@@ -41,7 +41,7 @@ function save(key: string, value: unknown) {
 export type ItemPatch = Partial<
   Pick<
     InventoryItem,
-    'estado' | 'ubicacion' | 'fecha_vencimiento' | 'fecha_apertura' | 'fecha_baja'
+    'estado' | 'ubicacion' | 'fecha_vencimiento' | 'fecha_apertura' | 'fecha_baja' | 'nombre' | 'comercio'
   > &
     Partial<Pick<InventoryItem, 'precio_pagado'>>
 >
@@ -75,6 +75,10 @@ interface Ctx {
   upsertRule: (rule: HomeRule) => void
   addInventory: (items: InventoryItem[]) => void
   updateStatus: (id_item: string, patch: ItemPatch) => void
+  /** Aplica el mismo cambio a varias unidades en un solo envío. */
+  updateMany: (ids: string[], patch: ItemPatch) => void
+  /** Elimina de verdad (borra la fila). Para deshacer: addInventory con las mismas filas. */
+  removeItems: (ids: string[]) => void
   transferItem: (id_item: string, nuevo_hogar_id: string) => void
   linkAlias: (alias: ReceiptAlias) => void
   toggleShopping: (item: ShoppingItem) => void
@@ -101,7 +105,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!s.homes.includes(s.activeHome)) s.activeHome = s.homes[0]
     return s
   })
-  const [db, setDb] = useState<DB>(() => ({ ...EMPTY_DB, ...load<Partial<DB>>(STORAGE_KEYS.db, {}) }))
+  const [db, setDb] = useState<DB>(() => {
+    const d = { ...EMPTY_DB, ...load<Partial<DB>>(STORAGE_KEYS.db, {}) }
+    return { ...d, inventario: dedupeById(d.inventario) }
+  })
   const [queue, setQueue] = useState<Payload[]>(() => load<Payload[]>(STORAGE_KEYS.queue, []))
   const [syncing, setSyncing] = useState(false)
   const [toast, setToast] = useState<Toast | null>(null)
@@ -258,7 +265,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (items: InventoryItem[]) =>
       commit({ action: 'ADD_INVENTORY', items }, (d) => ({
         ...d,
-        inventario: [...d.inventario, ...items],
+        inventario: dedupeById([...d.inventario, ...items]),
       })),
     [commit],
   )
@@ -269,6 +276,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...d,
         inventario: d.inventario.map((i) => (i.id_item === id_item ? { ...i, ...patch } : i)),
       })),
+    [commit],
+  )
+
+  const updateMany = useCallback(
+    (ids: string[], patch: ItemPatch) => {
+      if (!ids.length) return
+      const set = new Set(ids)
+      commit({ action: 'UPDATE_ITEM_STATUS', ids, ...patch }, (d) => ({
+        ...d,
+        inventario: d.inventario.map((i) => (set.has(i.id_item) ? { ...i, ...patch } : i)),
+      }))
+    },
+    [commit],
+  )
+
+  const removeItems = useCallback(
+    (ids: string[]) => {
+      if (!ids.length) return
+      const set = new Set(ids)
+      commit({ action: 'DELETE_ITEM', ids }, (d) => ({
+        ...d,
+        inventario: d.inventario.filter((i) => !set.has(i.id_item)),
+      }))
+    },
     [commit],
   )
 
@@ -365,6 +396,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       upsertRule,
       addInventory,
       updateStatus,
+      updateMany,
+      removeItems,
       transferItem,
       linkAlias,
       toggleShopping,
@@ -392,6 +425,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       upsertRule,
       addInventory,
       updateStatus,
+      updateMany,
+      removeItems,
       transferItem,
       linkAlias,
       toggleShopping,

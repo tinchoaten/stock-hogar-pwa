@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Copy, Plus, Share2, Trash2 } from 'lucide-react'
 import { BigButton, Label } from '../components/ui'
-import { generate, textOf } from '../gemini'
+import { generate, listModels, modelChain, textOf } from '../gemini'
 import { inviteLink, parseInviteInput } from '../invite'
 import { useApp } from '../store'
 import type { DB } from '../types'
@@ -22,6 +22,29 @@ export default function SettingsView() {
   const [iaTest, setIaTest] = useState<{ ok: boolean; msg: string } | null>(null)
   const [iaBusy, setIaBusy] = useState(false)
   const [iaStep, setIaStep] = useState('')
+  const [modelos, setModelos] = useState<string[] | null>(null)
+  const [modelosMsg, setModelosMsg] = useState('')
+  const [modelosBusy, setModelosBusy] = useState(false)
+
+  const verModelos = async () => {
+    const k = (draft.current.key || settings.geminiKey).trim()
+    if (!k) {
+      setModelosMsg('No hay clave cargada.')
+      return
+    }
+    setModelosBusy(true)
+    setModelosMsg('')
+    try {
+      const l = await listModels(k)
+      const ids = l.map((m) => m.id).sort()
+      setModelos(ids)
+      setModelosMsg(`Tu clave puede usar ${ids.length} modelos. Elegí uno abajo (la lista incluye modelos que no leen imágenes).`)
+    } catch (e) {
+      setModelosMsg(`No se pudo consultar: ${(e as Error).message}`)
+    } finally {
+      setModelosBusy(false)
+    }
+  }
 
   const probarIA = async () => {
     const k = (draft.current.key || settings.geminiKey).trim()
@@ -35,7 +58,7 @@ export default function SettingsView() {
       const j = await generate(
         k,
         { contents: [{ parts: [{ text: 'Respondé solo con la palabra OK' }] }] },
-        { timeoutMs: 20000, onTry: (m) => setIaStep(m) },
+        { timeoutMs: 20000, preferred: settings.geminiModel, onTry: (m) => setIaStep(m), onStatus: (m) => setIaStep(m) },
       )
       const txt = textOf(j)
       setIaTest({ ok: true, msg: `Gemini (${j._model}) respondió: “${txt || '(sin texto)'}”. La clave funciona.` })
@@ -195,6 +218,28 @@ export default function SettingsView() {
       >
         {iaBusy ? `Probando${iaStep ? ` (${iaStep})` : ''}…` : 'Probar conexión con Gemini'}
       </button>
+      <Label>Modelo de Gemini preferido</Label>
+      <select
+        value={settings.geminiModel}
+        onChange={(e) => setSettings({ ...settings, geminiModel: e.target.value })}
+        className={input}
+      >
+        <option value="">Automático ({modelChain()[0]} y respaldos)</option>
+        {[...new Set([...(modelos ?? []), ...modelChain(), ...(settings.geminiModel ? [settings.geminiModel] : [])])].map((m) => (
+          <option key={m} value={m}>
+            {m}
+          </option>
+        ))}
+      </select>
+      <p className="text-xs text-slate-500">Si el preferido está saturado o falla, la app prueba solos los demás.</p>
+      <button
+        onClick={() => void verModelos()}
+        disabled={modelosBusy}
+        className="mt-2 min-h-[44px] w-full rounded-xl bg-slate-700 font-semibold disabled:opacity-50"
+      >
+        {modelosBusy ? 'Consultando…' : 'Ver modelos disponibles para mi clave'}
+      </button>
+      {modelosMsg && <p className="mt-1 text-sm text-slate-300">{modelosMsg}</p>}
       {iaTest && (
         <p className="mt-1 text-sm" style={{ color: iaTest.ok ? '#4ade80' : '#f87171' }}>
           {iaTest.ok ? '✓ ' : '✗ '}

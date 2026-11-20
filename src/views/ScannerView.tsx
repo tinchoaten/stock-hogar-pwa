@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Mic, Plus } from 'lucide-react'
 import BarcodeScanner from '../components/BarcodeScanner'
 import { BigButton, Chip, Label, Sheet } from '../components/ui'
@@ -192,6 +192,7 @@ function IngresoSheet({
   const [venc, setVenc] = useState(addDays(today(), vidaCerrado))
   const [listening, setListening] = useState(false)
   const [heard, setHeard] = useState('')
+  const guardando = useRef(false) // evita que un doble toque guarde dos veces
 
   const dictar = () => {
     if (!speechSupported()) {
@@ -204,7 +205,7 @@ function IngresoSheet({
       (text) => {
         setHeard(`“${text}”`)
         const r = parseVoice(text)
-        if (r.cantidad) setCantidad(r.cantidad)
+        if (r.cantidad) setCantidad(Math.min(48, r.cantidad))
         if (r.precio) setPrecio(String(r.precio))
         if (r.vencimiento) setVenc(r.vencimiento)
       },
@@ -219,6 +220,10 @@ function IngresoSheet({
   }
 
   const guardar = () => {
+    if (guardando.current) return
+    // Más de 6 unidades de golpe casi nunca es una compra real: se confirma (evita cantidades mal dictadas).
+    if (cantidad > 6 && !window.confirm(`¿Seguro que querés cargar ${cantidad} unidades de ${nombre.trim() || product.nombre || product.ean}?`)) return
+    guardando.current = true
     const p = num(precio)
     const name = nombre.trim() || product.ean
     const fecha_ingreso = today()
@@ -301,10 +306,25 @@ function IngresoSheet({
       </div>
 
       <Label>Cantidad</Label>
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setCantidad(Math.max(1, cantidad - 1))}
+          className="h-11 w-11 shrink-0 rounded-xl bg-slate-800 text-xl font-bold active:scale-95"
+          aria-label="Menos"
+        >
+          −
+        </button>
+        <span className="w-10 text-center text-xl font-bold">{cantidad}</span>
+        <button
+          onClick={() => setCantidad(Math.min(48, cantidad + 1))}
+          className="h-11 w-11 shrink-0 rounded-xl bg-slate-800 text-xl font-bold active:scale-95"
+          aria-label="Más"
+        >
+          +
+        </button>
         {[1, 2, 3, 6].map((n) => (
           <Chip key={n} active={cantidad === n} color={accent} onClick={() => setCantidad(n)}>
-            +{n}
+            {n}
           </Chip>
         ))}
       </div>

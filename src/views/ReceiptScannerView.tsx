@@ -46,6 +46,7 @@ export default function ReceiptScannerView() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [linking, setLinking] = useState<number | null>(null)
+  const cargando = useRef(false) // evita que un doble toque cargue el ticket dos veces
 
   const factor = 1 - Math.min(100, Math.max(0, num(descuento))) / 100
   const neto = (r: Row) => Math.round(num(r.precio) * factor * 100) / 100
@@ -62,6 +63,7 @@ export default function ReceiptScannerView() {
       setMsg('Falta cargar la GEMINI_API_KEY en Ajustes.')
       return
     }
+    cargando.current = false
     setBusy(true)
     setMsg('Comprimiendo y leyendo el ticket con IA…')
     setRows([])
@@ -70,7 +72,12 @@ export default function ReceiptScannerView() {
       const json = await generate(settings.geminiKey, {
         contents: [{ parts: [{ text: PROMPT }, { inline_data: { mime_type: 'image/jpeg', data: b64 } }] }],
         generationConfig: { responseMimeType: 'application/json', temperature: 0 },
-      }, { timeoutMs: 60000, onTry: (m) => setMsg(`Leyendo el ticket con IA (${m})…`) })
+      }, {
+        timeoutMs: 60000,
+        preferred: settings.geminiModel,
+        onTry: (m) => setMsg(`Leyendo el ticket con IA (${m})…`),
+        onStatus: (m) => setMsg(m),
+      })
       const text: string = textOf(json) || '{}'
       const parsed = JSON.parse(text)
       const list: { descripcion: string; cantidad: number; precio_unitario: number }[] = Array.isArray(
@@ -111,6 +118,8 @@ export default function ReceiptScannerView() {
   }
 
   const cargar = () => {
+    if (cargando.current) return
+    cargando.current = true
     const items: InventoryItem[] = []
     for (const r of rows) {
       if (!r.include || !r.ean) continue
