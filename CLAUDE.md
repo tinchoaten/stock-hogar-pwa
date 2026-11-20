@@ -81,3 +81,7 @@ React 18 + TypeScript + Vite 8 + Tailwind CSS 3 + `vite-plugin-pwa` + `html5-qrc
 - `generate()` (`src/gemini.ts`): 503/429/500/502/504 o "high demand/overloaded/unavailable" ⇒ reintenta con espera 2 s, 5 s, 10 s y luego pasa al modelo siguiente; "retirado"/404, red y timeout ⇒ siguiente modelo; error real (clave, pedido) ⇒ corta. El mensaje final detalla cada modelo. `onStatus` muestra "Gemini está saturado… 1/3".
 - Pide `generationConfig.thinkingConfig.thinkingLevel = 'low'` (3.8-flash no admite "minimal"); si da 400 por ese parámetro, reintenta sin él.
 - Cadena (`GEMINI_MODELS`, verificada en la doc de Google nov-2026): 3.8-flash, 3.6-flash, flash-latest, 3.5-flash-lite, flash-lite-latest, 2.5-flash-lite, 2.5-flash (deprecado: desde el 1-dic-2026 redirige a 3.5-flash-lite). `settings.geminiModel` (Ajustes) se prueba primero. "Ver modelos disponibles para mi clave" usa `GET /v1beta/models` filtrando `generateContent`.
+
+## Compras: sacar productos
+- Cada renglón de Compras tiene 🗑 "Sacar de la lista": pone `stock_minimo = 0` (`UPSERT_HOME_RULE`) en los hogares de ese renglón, con confirmación y "Deshacer". Se vuelve a subir en Stock → Stock mínimo.
+- Los textos que Sheets convierte en número (p. ej. un producto llamado como su EAN) se fuerzan a string en `normalizeDB` (`api.ts`) al recibir datos y al cargar `localStorage`.

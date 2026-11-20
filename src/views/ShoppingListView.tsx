@@ -16,7 +16,7 @@ interface Line {
 const SIN_COMERCIO = 'Sin comercio definido'
 
 export default function ShoppingListView() {
-  const { db, activeHome, accent, settings, toggleShopping, sync } = useApp()
+  const { db, activeHome, accent, settings, toggleShopping, sync, upsertRule, showToast } = useApp()
   const [unificada, setUnificada] = useState(false)
 
   // Mientras esta vista está abierta, refresca cada 25 s para ver lo que tachan los demás.
@@ -77,6 +77,19 @@ export default function ShoppingListView() {
       }
       toggleShopping(item)
     }
+  }
+
+  /** "No volver a comprar": stock mínimo 0 en los hogares de la línea (se puede deshacer). */
+  const quitar = (l: Line) => {
+    if (!window.confirm(`¿Sacar "${l.nombre}" de la lista de compras? Dejará de aparecer (queda con stock mínimo 0; lo podés volver a subir en Stock → Stock mínimo).`)) return
+    const prev = l.partes
+      .map(([h]) => db.reglasHogar.find((r) => r.hogar_id === h && String(r.ean) === l.ean))
+      .filter((r): r is NonNullable<typeof r> => !!r)
+      .map((r) => ({ ...r, ean: String(r.ean) }))
+    for (const r of prev) upsertRule({ ...r, stock_minimo: 0 })
+    showToast(`Sacado de la lista: ${l.nombre}`, () => {
+      for (const r of prev) upsertRule(r)
+    })
   }
 
   const pendientes = lines.filter((l) => !comprado(l))
@@ -158,10 +171,10 @@ export default function ShoppingListView() {
       {lines.map((l) => {
         const done = comprado(l)
         return (
+          <div key={l.ean} className="flex items-stretch gap-2">
           <button
-            key={l.ean}
             onClick={() => toggle(l)}
-            className={`flex min-h-[64px] w-full items-center gap-3 rounded-2xl bg-slate-800 p-3 text-left active:scale-[0.99] ${
+            className={`flex min-h-[64px] min-w-0 flex-1 items-center gap-3 rounded-2xl bg-slate-800 p-3 text-left active:scale-[0.99] ${
               done ? 'opacity-50' : ''
             }`}
           >
@@ -181,6 +194,14 @@ export default function ShoppingListView() {
             </span>
             <span className="text-sm font-bold">{l.precio ? money(l.faltante * l.precio) : '—'}</span>
           </button>
+          <button
+            onClick={() => quitar(l)}
+            className="w-14 shrink-0 rounded-2xl bg-slate-800 text-lg text-red-400 active:scale-95"
+            aria-label={`Sacar ${l.nombre} de la lista`}
+          >
+            🗑
+          </button>
+          </div>
         )
       })}
     </div>
