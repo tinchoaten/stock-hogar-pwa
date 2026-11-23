@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { BigButton, Chip, Label, Sheet } from '../components/ui'
 import { isActiveItem, useApp } from '../store'
 import { useItemActions } from '../useItemActions'
 import { COMERCIOS, UBICACIONES } from '../config'
 import type { InventoryItem } from '../types'
+import { loadSort, saveSort, SORT_OPTIONS, sortItems, type SortKey } from '../stockSort'
 import { daysUntil, esLimpieza, estadoLabel, norm, num, sinVencimiento, TIPO_LIMPIEZA, truthy, vidaCerrada, ymd } from '../utils'
 
 const FILTROS = ['Todos', 'Heladera', 'Alacena', 'Freezer']
@@ -24,22 +25,26 @@ export default function InventoryView() {
   const acts = useItemActions()
   const [filtro, setFiltro] = useState('Todos')
   const [showMin, setShowMin] = useState(false)
+  const [orden, setOrden] = useState<SortKey>(loadSort)
   const reglas = db.reglasHogar
     .filter((r) => r.hogar_id === activeHome)
     .sort((a, b) => String(a.ean).localeCompare(String(b.ean)))
 
-  const items = db.inventario
-    .filter((i) => i.hogar_id === activeHome && isActiveItem(i))
-    .filter((i) => filtro === 'Todos' || i.ubicacion === filtro)
-    .filter((i) => !soloSinTacc || truthy(catOf(i.ean)?.sin_tacc))
-    .filter((i) => {
-      const t = norm(q)
-      if (!t) return true
-      const c = catOf(i.ean)
-      const hay = norm(`${i.nombre} ${c?.marca ?? ''} ${c?.categoria ?? ''}`)
-      return t.split(' ').every((w) => hay.includes(w))
-    })
-    .sort((a, b) => (a.fecha_vencimiento || '9999').localeCompare(b.fecha_vencimiento || '9999'))
+  const items = useMemo(() => {
+    const t = norm(q)
+    const palabras = t ? t.split(' ') : []
+    const lista = db.inventario
+      .filter((i) => i.hogar_id === activeHome && isActiveItem(i))
+      .filter((i) => filtro === 'Todos' || i.ubicacion === filtro)
+      .filter((i) => !soloSinTacc || truthy(catOf(i.ean)?.sin_tacc))
+      .filter((i) => {
+        if (!palabras.length) return true
+        const c = catOf(i.ean)
+        const hay = norm(`${i.nombre} ${c?.marca ?? ''} ${c?.categoria ?? ''}`)
+        return palabras.every((w) => hay.includes(w))
+      })
+    return sortItems(lista, orden)
+  }, [db.inventario, db.catalogo, activeHome, filtro, soloSinTacc, q, orden])
 
   return (
     <div className="space-y-3 p-3">
@@ -66,6 +71,24 @@ export default function InventoryView() {
           </Chip>
         ))}
       </div>
+      <label className="flex items-center gap-2">
+        <span className="shrink-0 text-sm font-bold text-slate-400">Ordenar</span>
+        <select
+          value={orden}
+          onChange={(e) => {
+            const k = e.target.value as SortKey
+            setOrden(k)
+            saveSort(k)
+          }}
+          className="min-h-[48px] min-w-0 flex-1 rounded-xl bg-slate-800 px-3 text-base"
+        >
+          {SORT_OPTIONS.map((o) => (
+            <option key={o.key} value={o.key}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
 
       {items.length === 0 && (
         <p className="py-10 text-center text-slate-400">No hay productos en {activeHome}.</p>

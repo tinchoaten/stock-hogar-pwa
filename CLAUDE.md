@@ -85,3 +85,8 @@ React 18 + TypeScript + Vite 8 + Tailwind CSS 3 + `vite-plugin-pwa` + `html5-qrc
 ## Compras: sacar productos
 - Cada renglón de Compras tiene 🗑 "Sacar de la lista": pone `stock_minimo = 0` (`UPSERT_HOME_RULE`) en los hogares de ese renglón, con confirmación y "Deshacer". Se vuelve a subir en Stock → Stock mínimo.
 - Los textos que Sheets convierte en número (p. ej. un producto llamado como su EAN) se fuerzan a string en `normalizeDB` (`api.ts`) al recibir datos y al cargar `localStorage`.
+
+## Orden en Stock
+- Selector "Ordenar" (select nativo, 48 px) en `InventoryView`; lógica pura en `src/stockSort.ts` (`sortItems`), probada con `node --experimental-strip-types scripts/test-stocksort.mjs`. Criterios: vencimiento (predeterminado; sin vencimiento al final), nombre A→Z / Z→A (`Intl.Collator('es', {sensitivity:'base', numeric:true})`; vacíos al final), más recientes / más antiguos y precio (mayor a menor).
+- "Recientes": día de `fecha_ingreso` (vía `parseDate`) → hora de creación del `id_item` (`it_<Date.now() base36>`) → posición en `db.inventario` (más abajo = más reciente).
+- La elección se guarda por dispositivo en `localStorage` (`sh.stockSort`, con `try/catch`); no se sincroniza.
